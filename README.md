@@ -59,7 +59,22 @@ flowchart LR
 - **`fct_training_load_daily`** (one row per day): 7-day acute load, 28-day chronic load,
   and the acute:chronic workload ratio.
 - **`mart_weekly_summary`** (one row per ISO week): running volume next to nutrition adherence.
-- **`dim_date`**: calendar with a `has_strava_coverage` flag, so "no data" is never confused with "no runs".
+- **`dim_date`**: calendar with a `has_strava_coverage` flag (first to last synced run), so "no data" is never confused with "no runs". A stalled sync can't masquerade as a week of rest.
+
+## Dashboard
+
+`scripts/build_dashboard.py` renders a single-page dashboard from the marts:
+weekly volume, training load, calories against the goal band, and a runs table.
+It also reads dbt's own `target/run_results.json`, so the page opens with a
+**data-health strip**: tests passed, warnings, and a plain-language line for each
+warn-level monitor that fired.
+
+**[Live demo on synthetic data](https://trevorlomba.github.io/run-analytics-dbt/)** (`docs/index.html`)
+
+```bash
+dbt build --vars '{raw_data_dir: data/sample}'
+python scripts/build_dashboard.py --sample --standalone --out docs/index.html
+```
 
 ## Design decisions
 
@@ -120,6 +135,7 @@ GitHub Actions runs on every push and pull request:
 1. Regenerate the sample data and fail if it differs from the committed copy.
 2. `dbt build` all models and tests on the sample data.
 3. `dbt docs generate`.
+4. Build the dashboard from the sample marts.
 
 ## Stack
 

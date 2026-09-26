@@ -19,6 +19,9 @@ select
     cast(date_trunc('month', date_day) as date)     as month_start,
     dayname(date_day)                               as day_name,
     isodow(date_day) in (6, 7)                      as is_weekend,
-    date_day >= (select min(run_date) from {{ ref('stg_strava__activities') }})
+    -- Coverage runs from the first to the last synced run. Days after the last
+    -- sync are unknown, not rest days, so load metrics must not treat them as zero.
+    date_day between (select min(run_date) from {{ ref('stg_strava__activities') }})
+                 and (select max(run_date) from {{ ref('stg_strava__activities') }})
                                                     as has_strava_coverage
 from spine

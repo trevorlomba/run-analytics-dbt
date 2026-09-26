@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Training &amp; Fuel</title>
+<style>
+  :root{
+    --bg:#f7f8f5; --surface:#ffffff; --surface-2:#eef1ec; --border:#dfe3dc;
+    --ink:#1d231f; --ink-muted:#5e665f; --ink-faint:#8d948b;
+    --accent:#2f6b52; --accent-soft:#8fbba3; --accent-wash:#e3efe7;
+    --hr:#b5622f; --good:#1f7a3f; --good-wash:#e2f1e6; --warn:#9a4f22; --warn-wash:#f6ebe2;
+    --bad:#b23a3a; --bad-wash:#f7e3e1;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#141817; --surface:#1c2120; --surface-2:#232927; --border:#323a37;
+      --ink:#eceee9; --ink-muted:#a4aba3; --ink-faint:#7b837b;
+      --accent:#6ec79a; --accent-soft:#3f6a55; --accent-wash:#1f3029;
+      --hr:#e0925e; --good:#6fcf8f; --good-wash:#1d3325; --warn:#e8a57a; --warn-wash:#33261d;
+      --bad:#ec8a84; --bad-wash:#3a2322;
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#141817; --surface:#1c2120; --surface-2:#232927; --border:#323a37;
+    --ink:#eceee9; --ink-muted:#a4aba3; --ink-faint:#7b837b;
+    --accent:#6ec79a; --accent-soft:#3f6a55; --accent-wash:#1f3029;
+    --hr:#e0925e; --good:#6fcf8f; --good-wash:#1d3325; --warn:#e8a57a; --warn-wash:#33261d;
+    --bad:#ec8a84; --bad-wash:#3a2322;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;padding-block:24px 40px;padding-inline:16px;margin:0}
+  .wrap{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+  .eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);font-weight:600}
+  h1{margin:2px 0 0;font-size:26px;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+  .subhead{color:var(--ink-muted);font-size:14px;margin:4px 0 0;line-height:1.5}
+  .sample-flag{display:inline-block;margin-top:8px;font-size:12px;font-weight:600;color:var(--warn);background:var(--warn-wash);border-radius:6px;padding:3px 8px}
+  code,.mart{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px}
+  .mart{color:var(--ink-faint);font-weight:500}
+
+  .health{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+  .health-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+  .health-title{font-size:13px;font-weight:700;margin-right:4px}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;border-radius:999px;padding:4px 10px;font-variant-numeric:tabular-nums}
+  .chip svg{width:13px;height:13px;flex:none}
+  .chip.good{color:var(--good);background:var(--good-wash)}
+  .chip.warn{color:var(--warn);background:var(--warn-wash)}
+  .chip.bad{color:var(--bad);background:var(--bad-wash)}
+  .warn-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+  .warn-list:empty{display:none}
+  .warn-list li{font-size:13px;line-height:1.5;color:var(--ink);display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline}
+  .warn-list li code{color:var(--warn)}
+
+  .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media (max-width:640px){.stat-grid{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:4px}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);font-weight:600}
+  .value{font-size:24px;font-weight:700;letter-spacing:-.01em}
+  .foot{font-size:12px;color:var(--ink-muted)}
+
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 18px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+  .panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:4px 12px;flex-wrap:wrap}
+  .panel-title{font-size:15px;font-weight:700}
+  .panel-note{font-size:12.5px;color:var(--ink-muted);margin:0;line-height:1.5;max-width:68ch}
+  .legend{display:flex;gap:6px 16px;font-size:12px;color:var(--ink-muted);flex-wrap:wrap}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .key-line{width:16px;height:0;border-top:2px solid var(--accent)}
+  .key-line.dash{border-top:2px dashed var(--ink-muted)}
+  .key-dot{width:9px;height:9px;border-radius:50%;background:var(--accent)}
+  .key-dot.hollow{background:transparent;border:2px solid var(--hr)}
+  .key-band{width:16px;height:10px;background:var(--accent-wash);border-top:1px solid var(--accent-soft);border-bottom:1px solid var(--accent-soft)}
+
+  .chart{position:relative;width:100%}
+  .chart svg{display:block;width:100%;overflow:visible}
+  .grid{stroke:var(--border);stroke-width:1}
+  .base{stroke:var(--ink-faint);stroke-width:1}
+  .ax{fill:var(--ink-faint);font-size:10.5px;font-variant-numeric:tabular-nums}
+  .dlabel{fill:var(--ink-muted);font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+  .tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:6px 9px;border-radius:8px;white-space:nowrap;opacity:0;transition:opacity .1s;font-variant-numeric:tabular-nums;line-height:1.45;z-index:2;left:0;top:0}
+  .tip b{font-weight:700}
+
+  .table-wrap{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);font-weight:600;text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+  td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap}
+  th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+  tr:last-child td{border-bottom:none}
+  td.muted{color:var(--ink-faint)}
+  .tag{display:inline-block;font-size:11px;font-weight:600;border-radius:5px;padding:1px 6px;margin-left:6px;color:var(--ink-muted);background:var(--surface-2)}
+  .tag.good{color:var(--good);background:var(--good-wash)}
+  .name{max-width:200px;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom}
+  details summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--accent)}
+  details summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+  footer{font-size:12px;color:var(--ink-faint);text-align:center;line-height:1.6}
+  footer a{color:var(--ink-muted)}
+  @media (prefers-reduced-motion:reduce){.tip{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">run-analytics-dbt · marts</div>
+    <h1>Training &amp; Fuel</h1>
+    <p class="subhead" id="subhead"></p>
+    <span class="sample-flag" id="sample-flag" hidden>Synthetic sample data. Every number here is generated.</span>
+  </header>
+
+  <section class="health" aria-label="Data health">
+    <div class="health-row" id="health-chips"><span class="health-title">Data health</span></div>
+    <ul class="warn-list" id="warn-list"></ul>
+  </section>
+
+  <section class="stat-grid" id="kpis" aria-label="Summary"></section>
+
+  <section class="panel">
+    <div class="panel-head"><span class="panel-title">Weekly running volume</span><span class="mart">mart_weekly_summary</span></div>
+    <div class="chart" id="weekly-chart"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span class="panel-title">Training load</span><span class="mart">fct_training_load_daily</span></div>
+    <div class="legend"><span><i class="key-line"></i>Last 7 days (acute)</span><span><i class="key-line dash"></i>28-day weekly average (chronic)</span></div>
+    <div class="chart" id="load-chart"></div>
+    <p class="panel-note" id="load-note"></p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span class="panel-title">Calories vs. goal</span><span class="mart">fct_daily_nutrition</span></div>
+    <div class="legend"><span><i class="key-band"></i>Goal ±10% for that day type</span><span><i class="key-dot"></i>Within range</span><span><i class="key-dot hollow"></i>Outside range</span></div>
+    <div class="chart" id="cal-chart"></div>
+    <p class="panel-note">Each day is matched to the targets in force on that date (a type-2 history), so the band steps down where the plan changed. Days before the first goal window have no band.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span class="panel-title">Runs</span><span class="mart">fct_runs</span></div>
+    <div class="table-wrap"><table id="runs-table"></table></div>
+  </section>
+
+  <section class="panel">
+    <details>
+      <summary>Weekly table</summary>
+      <div class="table-wrap" style="margin-top:10px"><table id="weekly-table"></table></div>
+    </details>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+const DATA = {"meta":{"dataset":"sample","built_at":"2026-09-26 01:28","date_min":"2026-04-20","date_max":"2026-09-20","latest_run":"2026-09-17","latest_log":"2026-09-20"},"health":{"pass":50,"warn":0,"fail":0,"total":50,"warnings":[]},"kpis":{"runs":34,"km":215.34,"protein_hit":0.5245,"calorie_hit":0.8392,"goal_days":143},"weekly":[{"week_start":"2026-04-20","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":null,"avg_calories":null,"avg_protein_g":null,"protein_goal_hit_rate":null,"calorie_goal_hit_rate":null},{"week_start":"2026-04-27","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":3,"avg_calories":1427.3333,"avg_protein_g":163.3667,"protein_goal_hit_rate":0.3333,"calorie_goal_hit_rate":0.0},{"week_start":"2026-05-04","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":7,"avg_calories":1657.8571,"avg_protein_g":170.9429,"protein_goal_hit_rate":0.4286,"calorie_goal_hit_rate":1.0},{"week_start":"2026-05-11","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":7,"avg_calories":1614.5714,"avg_protein_g":173.5,"protein_goal_hit_rate":0.4286,"calorie_goal_hit_rate":0.7143},{"week_start":"2026-05-18","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":7,"avg_calories":1617.7143,"avg_protein_g":164.6857,"protein_goal_hit_rate":0.1429,"calorie_goal_hit_rate":0.8571},{"week_start":"2026-05-25","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":7,"avg_calories":1644.7143,"avg_protein_g":176.2143,"protein_goal_hit_rate":0.5714,"calorie_goal_hit_rate":1.0},{"week_start":"2026-06-01","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":7,"avg_calories":1677.8571,"avg_protein_g":186.6571,"protein_goal_hit_rate":0.8571,"calorie_goal_hit_rate":0.8571},{"week_start":"2026-06-08","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":7,"avg_calories":1594.5714,"avg_protein_g":171.3429,"protein_goal_hit_rate":0.5714,"calorie_goal_hit_rate":1.0},{"week_start":"2026-06-15","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":7,"avg_calories":1580.1429,"avg_protein_g":164.5,"protein_goal_hit_rate":0.2857,"calorie_goal_hit_rate":0.4286},{"week_start":"2026-06-22","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":7,"avg_calories":1633.7143,"avg_protein_g":175.6857,"protein_goal_hit_rate":0.7143,"calorie_goal_hit_rate":0.7143},{"week_start":"2026-06-29","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":7,"avg_calories":1588.0,"avg_protein_g":171.3143,"protein_goal_hit_rate":0.4286,"calorie_goal_hit_rate":0.5714},{"week_start":"2026-07-06","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":7,"avg_calories":1562.8571,"avg_protein_g":167.8,"protein_goal_hit_rate":0.4286,"calorie_goal_hit_rate":0.8571},{"week_start":"2026-07-13","runs":0,"run_km":0.0,"long_run_km":null,"avg_pace_s_per_km":null,"days_logged":7,"avg_calories":1604.5714,"avg_protein_g":172.0571,"protein_goal_hit_rate":0.5714,"calorie_goal_hit_rate":1.0},{"week_start":"2026-07-20","runs":3,"run_km":23.11,"long_run_km":8.64,"avg_pace_s_per_km":326.2657,"days_logged":7,"avg_calories":1748.7143,"avg_protein_g":173.9857,"protein_goal_hit_rate":0.4286,"calorie_goal_hit_rate":0.8571},{"week_start":"2026-07-27","runs":7,"run_km":40.6,"long_run_km":8.58,"avg_pace_s_per_km":326.9951,"days_logged":7,"avg_calories":1861.2857,"avg_protein_g":169.9857,"protein_goal_hit_rate":0.5714,"calorie_goal_hit_rate":1.0},{"week_start":"2026-08-03","runs":3,"run_km":17.13,"long_run_km":6.63,"avg_pace_s_per_km":318.3888,"days_logged":7,"avg_calories":1696.1429,"avg_protein_g":173.1571,"protein_goal_hit_rate":0.7143,"calorie_goal_hit_rate":0.8571},{"week_start":"2026-08-10","runs":5,"run_km":30.59,"long_run_km":8.59,"avg_pace_s_per_km":328.6041,"days_logged":7,"avg_calories":1767.7143,"avg_protein_g":174.9571,"protein_goal_hit_rate":0.5714,"calorie_goal_hit_rate":0.8571},{"week_start":"2026-08-17","runs":2,"run_km":15.72,"long_run_km":8.63,"avg_pace_s_per_km":316.7939,"days_logged":7,"avg_calories":1645.7143,"avg_protein_g":181.5143,"protein_goal_hit_rate":0.7143,"calorie_goal_hit_rate":1.0},{"week_start":"2026-08-24","runs":1,"run_km":5.8,"long_run_km":5.8,"avg_pace_s_per_km":312.7586,"days_logged":7,"avg_calories":1623.8571,"avg_protein_g":172.4286,"protein_goal_hit_rate":0.4286,"calorie_goal_hit_rate":0.8571},{"week_start":"2026-08-31","runs":6,"run_km":34.34,"long_run_km":6.55,"avg_pace_s_per_km":314.7932,"days_logged":7,"avg_calories":1735.1429,"avg_protein_g":171.2,"protein_goal_hit_rate":0.2857,"calorie_goal_hit_rate":1.0},{"week_start":"2026-09-07","runs":4,"run_km":29.68,"long_run_km":9.66,"avg_pace_s_per_km":319.0701,"days_logged":7,"avg_calories":1687.1429,"avg_protein_g":177.3286,"protein_goal_hit_rate":0.8571,"calorie_goal_hit_rate":0.8571},{"week_start":"2026-09-14","runs":3,"run_km":18.37,"long_run_km":8.31,"avg_pace_s_per_km":326.4017,"days_logged":7,"avg_calories":1634.5714,"avg_protein_g":176.2571,"protein_goal_hit_rate":0.5714,"calorie_goal_hit_rate":0.8571}],"load":[{"date_day":"2026-07-21","run_km":8.64,"acute_7d_km":8.64,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-07-22","run_km":7.77,"acute_7d_km":16.41,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-07-23","run_km":6.7,"acute_7d_km":23.11,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-07-24","run_km":0.0,"acute_7d_km":23.11,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-07-25","run_km":0.0,"acute_7d_km":23.11,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-07-26","run_km":0.0,"acute_7d_km":23.11,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-07-27","run_km":3.43,"acute_7d_km":26.54,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-07-28","run_km":7.49,"acute_7d_km":25.39,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-07-29","run_km":6.24,"acute_7d_km":23.86,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-07-30","run_km":8.58,"acute_7d_km":25.74,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-07-31","run_km":6.59,"acute_7d_km":32.33,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-01","run_km":4.34,"acute_7d_km":36.67,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-02","run_km":3.93,"acute_7d_km":40.6,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-03","run_km":0.0,"acute_7d_km":37.17,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-04","run_km":6.63,"acute_7d_km":36.31,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-05","run_km":6.21,"acute_7d_km":36.28,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-06","run_km":0.0,"acute_7d_km":27.7,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-07","run_km":0.0,"acute_7d_km":21.11,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-08","run_km":4.29,"acute_7d_km":21.06,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-09","run_km":0.0,"acute_7d_km":17.13,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-10","run_km":0.0,"acute_7d_km":17.13,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-11","run_km":7.15,"acute_7d_km":17.65,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-12","run_km":8.59,"acute_7d_km":20.03,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-13","run_km":0.0,"acute_7d_km":20.03,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-14","run_km":4.52,"acute_7d_km":24.55,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-15","run_km":4.09,"acute_7d_km":24.35,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-16","run_km":6.24,"acute_7d_km":30.59,"chronic_weekly_km":null,"acute_chronic_ratio":null},{"date_day":"2026-08-17","run_km":0.0,"acute_7d_km":30.59,"chronic_weekly_km":27.8575,"acute_chronic_ratio":1.0981},{"date_day":"2026-08-18","run_km":0.0,"acute_7d_km":23.44,"chronic_weekly_km":25.6975,"acute_chronic_ratio":0.9122},{"date_day":"2026-08-19","run_km":0.0,"acute_7d_km":14.85,"chronic_weekly_km":23.755,"acute_chronic_ratio":0.6251},{"date_day":"2026-08-20","run_km":0.0,"acute_7d_km":14.85,"chronic_weekly_km":22.08,"acute_chronic_ratio":0.6726},{"date_day":"2026-08-21","run_km":8.63,"acute_7d_km":18.96,"chronic_weekly_km":24.2375,"acute_chronic_ratio":0.7823},{"date_day":"2026-08-22","run_km":0.0,"acute_7d_km":14.87,"chronic_weekly_km":24.2375,"acute_chronic_ratio":0.6135},{"date_day":"2026-08-23","run_km":7.09,"acute_7d_km":15.72,"chronic_weekly_km":26.01,"acute_chronic_ratio":0.6044},{"date_day":"2026-08-24","run_km":0.0,"acute_7d_km":15.72,"chronic_weekly_km":25.1525,"acute_chronic_ratio":0.625},{"date_day":"2026-08-25","run_km":0.0,"acute_7d_km":15.72,"chronic_weekly_km":23.28,"acute_chronic_ratio":0.6753},{"date_day":"2026-08-26","run_km":0.0,"acute_7d_km":15.72,"chronic_weekly_km":21.72,"acute_chronic_ratio":0.7238},{"date_day":"2026-08-27","run_km":0.0,"acute_7d_km":15.72,"chronic_weekly_km":19.575,"acute_chronic_ratio":0.8031},{"date_day":"2026-08-28","run_km":0.0,"acute_7d_km":7.09,"chronic_weekly_km":17.9275,"acute_chronic_ratio":0.3955},{"date_day":"2026-08-29","run_km":0.0,"acute_7d_km":7.09,"chronic_weekly_km":16.8425,"acute_chronic_ratio":0.421},{"date_day":"2026-08-30","run_km":5.8,"acute_7d_km":5.8,"chronic_weekly_km":17.31,"acute_chronic_ratio":0.3351},{"date_day":"2026-08-31","run_km":6.44,"acute_7d_km":12.24,"chronic_weekly_km":18.92,"acute_chronic_ratio":0.6469},{"date_day":"2026-09-01","run_km":6.55,"acute_7d_km":18.79,"chronic_weekly_km":18.9,"acute_chronic_ratio":0.9942},{"date_day":"2026-09-02","run_km":5.01,"acute_7d_km":23.8,"chronic_weekly_km":18.6,"acute_chronic_ratio":1.2796},{"date_day":"2026-09-03","run_km":5.04,"acute_7d_km":28.84,"chronic_weekly_km":19.86,"acute_chronic_ratio":1.4522},{"date_day":"2026-09-04","run_km":5.59,"acute_7d_km":34.43,"chronic_weekly_km":21.2575,"acute_chronic_ratio":1.6197},{"date_day":"2026-09-05","run_km":5.71,"acute_7d_km":40.14,"chronic_weekly_km":21.6125,"acute_chronic_ratio":1.8573},{"date_day":"2026-09-06","run_km":0.0,"acute_7d_km":34.34,"chronic_weekly_km":21.6125,"acute_chronic_ratio":1.5889},{"date_day":"2026-09-07","run_km":5.54,"acute_7d_km":33.44,"chronic_weekly_km":22.9975,"acute_chronic_ratio":1.4541},{"date_day":"2026-09-08","run_km":8.98,"acute_7d_km":35.87,"chronic_weekly_km":23.455,"acute_chronic_ratio":1.5293},{"date_day":"2026-09-09","run_km":5.5,"acute_7d_km":36.36,"chronic_weekly_km":22.6825,"acute_chronic_ratio":1.603},{"date_day":"2026-09-10","run_km":9.66,"acute_7d_km":40.98,"chronic_weekly_km":25.0975,"acute_chronic_ratio":1.6328},{"date_day":"2026-09-11","run_km":0.0,"acute_7d_km":35.39,"chronic_weekly_km":23.9675,"acute_chronic_ratio":1.4766},{"date_day":"2026-09-12","run_km":0.0,"acute_7d_km":29.68,"chronic_weekly_km":22.945,"acute_chronic_ratio":1.2935},{"date_day":"2026-09-13","run_km":0.0,"acute_7d_km":29.68,"chronic_weekly_km":21.385,"acute_chronic_ratio":1.3879},{"date_day":"2026-09-14","run_km":3.38,"acute_7d_km":27.52,"chronic_weekly_km":22.23,"acute_chronic_ratio":1.238},{"date_day":"2026-09-15","run_km":0.0,"acute_7d_km":18.54,"chronic_weekly_km":22.23,"acute_chronic_ratio":0.834},{"date_day":"2026-09-16","run_km":8.31,"acute_7d_km":21.35,"chronic_weekly_km":24.3075,"acute_chronic_ratio":0.8783},{"date_day":"2026-09-17","run_km":6.68,"acute_7d_km":18.37,"chronic_weekly_km":25.9775,"acute_chronic_ratio":0.7072}],"nutrition":[{"log_date":"2026-04-20","day_type":"Rest","calories":1714.0,"calories_goal":null,"protein_g":193.8,"protein_g_goal":null,"hit_calorie_goal":null},{"log_date":"2026-04-21","day_type":"Rest","calories":1533.0,"calories_goal":null,"protein_g":168.5,"protein_g_goal":null,"hit_calorie_goal":null},{"log_date":"2026-04-22","day_type":"Rest","calories":1554.0,"calories_goal":null,"protein_g":161.2,"protein_g_goal":null,"hit_calorie_goal":null},{"log_date":"2026-04-23","day_type":"Rest","calories":1620.0,"calories_goal":null,"protein_g":190.8,"protein_g_goal":null,"hit_calorie_goal":null},{"log_date":"2026-04-24","day_type":"Rest","calories":1716.0,"calories_goal":null,"protein_g":184.6,"protein_g_goal":null,"hit_calorie_goal":null},{"log_date":"2026-04-25","day_type":"Rest","calories":1577.0,"calories_goal":null,"protein_g":170.0,"protein_g_goal":null,"hit_calorie_goal":null},{"log_date":"2026-04-26","day_type":"Rest","calories":1481.0,"calories_goal":null,"protein_g":174.5,"protein_g_goal":null,"hit_calorie_goal":null},{"log_date":"2026-04-27","day_type":"Lift Only","calories":1874.0,"calories_goal":null,"protein_g":187.3,"protein_g_goal":null,"hit_calorie_goal":null},{"log_date":"2026-04-28","day_type":"Rest","calories":1552.0,"calories_goal":null,"protein_g":177.9,"protein_g_goal":null,"hit_calorie_goal":null},{"log_date":"2026-04-29","day_type":"Rest","calories":1703.0,"calories_goal":null,"protein_g":194.4,"protein_g_goal":null,"hit_calorie_goal":null},{"log_date":"2026-04-30","day_type":"Rest","calories":1557.0,"calories_goal":null,"protein_g":176.4,"protein_g_goal":null,"hit_calorie_goal":null},{"log_date":"2026-05-01","day_type":"Rest","calories":1433.0,"calories_goal":1650.0,"protein_g":175.9,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-05-02","day_type":"Rest","calories":1421.0,"calories_goal":1650.0,"protein_g":155.0,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-05-03","day_type":"Rest","calories":1428.0,"calories_goal":1650.0,"protein_g":159.2,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-05-04","day_type":"Rest","calories":1622.0,"calories_goal":1650.0,"protein_g":167.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-05","day_type":"Rest","calories":1701.0,"calories_goal":1650.0,"protein_g":175.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-06","day_type":"Rest","calories":1662.0,"calories_goal":1650.0,"protein_g":163.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-07","day_type":"Lift Only","calories":1899.0,"calories_goal":1800.0,"protein_g":184.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-08","day_type":"Rest","calories":1580.0,"calories_goal":1650.0,"protein_g":181.5,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-09","day_type":"Rest","calories":1636.0,"calories_goal":1650.0,"protein_g":168.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-10","day_type":"Rest","calories":1505.0,"calories_goal":1650.0,"protein_g":155.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-11","day_type":"Lift Only","calories":1441.0,"calories_goal":1800.0,"protein_g":169.2,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-05-12","day_type":"Lift Only","calories":1888.0,"calories_goal":1800.0,"protein_g":187.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-13","day_type":"Lift Only","calories":1578.0,"calories_goal":1800.0,"protein_g":169.3,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-05-14","day_type":"Rest","calories":1563.0,"calories_goal":1650.0,"protein_g":188.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-15","day_type":"Rest","calories":1530.0,"calories_goal":1650.0,"protein_g":167.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-16","day_type":"Rest","calories":1627.0,"calories_goal":1650.0,"protein_g":175.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-17","day_type":"Lift Only","calories":1675.0,"calories_goal":1800.0,"protein_g":157.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-18","day_type":"Lift Only","calories":1690.0,"calories_goal":1800.0,"protein_g":159.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-19","day_type":"Lift Only","calories":1794.0,"calories_goal":1800.0,"protein_g":181.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-20","day_type":"Rest","calories":1663.0,"calories_goal":1650.0,"protein_g":169.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-21","day_type":"Rest","calories":1547.0,"calories_goal":1650.0,"protein_g":164.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-22","day_type":"Rest","calories":1495.0,"calories_goal":1650.0,"protein_g":160.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-23","day_type":"Rest","calories":1477.0,"calories_goal":1650.0,"protein_g":155.0,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-05-24","day_type":"Rest","calories":1658.0,"calories_goal":1650.0,"protein_g":162.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-25","day_type":"Lift Only","calories":1749.0,"calories_goal":1800.0,"protein_g":188.4,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-26","day_type":"Rest","calories":1592.0,"calories_goal":1650.0,"protein_g":163.1,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-27","day_type":"Rest","calories":1585.0,"calories_goal":1650.0,"protein_g":185.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-28","day_type":"Rest","calories":1520.0,"calories_goal":1650.0,"protein_g":183.5,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-29","day_type":"Rest","calories":1590.0,"calories_goal":1650.0,"protein_g":169.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-30","day_type":"Rest","calories":1736.0,"calories_goal":1650.0,"protein_g":175.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-05-31","day_type":"Lift Only","calories":1741.0,"calories_goal":1800.0,"protein_g":167.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-01","day_type":"Rest","calories":1446.0,"calories_goal":1650.0,"protein_g":182.0,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-06-02","day_type":"Rest","calories":1645.0,"calories_goal":1650.0,"protein_g":190.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-03","day_type":"Rest","calories":1793.0,"calories_goal":1650.0,"protein_g":193.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-04","day_type":"Rest","calories":1763.0,"calories_goal":1650.0,"protein_g":192.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-05","day_type":"Rest","calories":1721.0,"calories_goal":1650.0,"protein_g":164.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-06","day_type":"Rest","calories":1565.0,"calories_goal":1650.0,"protein_g":189.1,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-07","day_type":"Rest","calories":1812.0,"calories_goal":1650.0,"protein_g":193.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-08","day_type":"Rest","calories":1515.0,"calories_goal":1650.0,"protein_g":180.2,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-09","day_type":"Lift Only","calories":1793.0,"calories_goal":1800.0,"protein_g":153.2,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-10","day_type":"Rest","calories":1529.0,"calories_goal":1650.0,"protein_g":170.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-11","day_type":"Rest","calories":1648.0,"calories_goal":1650.0,"protein_g":180.6,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-12","day_type":"Rest","calories":1572.0,"calories_goal":1650.0,"protein_g":173.5,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-13","day_type":"Rest","calories":1559.0,"calories_goal":1650.0,"protein_g":178.6,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-14","day_type":"Rest","calories":1546.0,"calories_goal":1650.0,"protein_g":162.6,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-15","day_type":"Rest","calories":1481.0,"calories_goal":1650.0,"protein_g":160.6,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-06-16","day_type":"Lift Only","calories":1599.0,"calories_goal":1800.0,"protein_g":179.8,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-06-17","day_type":"Lift Only","calories":1745.0,"calories_goal":1800.0,"protein_g":174.4,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-18","day_type":"Rest","calories":1432.0,"calories_goal":1650.0,"protein_g":161.6,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-06-19","day_type":"Rest","calories":1548.0,"calories_goal":1650.0,"protein_g":156.2,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-20","day_type":"Rest","calories":1450.0,"calories_goal":1650.0,"protein_g":153.2,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-06-21","day_type":"Lift Only","calories":1806.0,"calories_goal":1800.0,"protein_g":165.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-22","day_type":"Lift Only","calories":1918.0,"calories_goal":1800.0,"protein_g":184.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-23","day_type":"Rest","calories":1672.0,"calories_goal":1650.0,"protein_g":168.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-24","day_type":"Lift Only","calories":1812.0,"calories_goal":1800.0,"protein_g":174.6,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-25","day_type":"Rest","calories":1551.0,"calories_goal":1650.0,"protein_g":191.6,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-26","day_type":"Rest","calories":1533.0,"calories_goal":1650.0,"protein_g":181.2,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-27","day_type":"Rest","calories":1475.0,"calories_goal":1650.0,"protein_g":171.5,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-06-28","day_type":"Rest","calories":1475.0,"calories_goal":1650.0,"protein_g":157.3,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-06-29","day_type":"Rest","calories":1573.0,"calories_goal":1650.0,"protein_g":177.4,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-06-30","day_type":"Rest","calories":1457.0,"calories_goal":1650.0,"protein_g":163.9,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-07-01","day_type":"Lift Only","calories":1584.0,"calories_goal":1800.0,"protein_g":166.1,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-07-02","day_type":"Lift Only","calories":1711.0,"calories_goal":1800.0,"protein_g":168.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-03","day_type":"Lift Only","calories":1752.0,"calories_goal":1800.0,"protein_g":175.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-04","day_type":"Rest","calories":1623.0,"calories_goal":1650.0,"protein_g":189.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-05","day_type":"Rest","calories":1416.0,"calories_goal":1650.0,"protein_g":157.9,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-07-06","day_type":"Rest","calories":1477.0,"calories_goal":1650.0,"protein_g":160.4,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-07-07","day_type":"Rest","calories":1497.0,"calories_goal":1650.0,"protein_g":164.4,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-08","day_type":"Lift Only","calories":1698.0,"calories_goal":1800.0,"protein_g":189.5,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-09","day_type":"Rest","calories":1541.0,"calories_goal":1650.0,"protein_g":174.4,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-10","day_type":"Rest","calories":1529.0,"calories_goal":1650.0,"protein_g":155.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-11","day_type":"Rest","calories":1638.0,"calories_goal":1650.0,"protein_g":173.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-12","day_type":"Rest","calories":1560.0,"calories_goal":1650.0,"protein_g":157.1,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-13","day_type":"Rest","calories":1542.0,"calories_goal":1650.0,"protein_g":175.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-14","day_type":"Rest","calories":1603.0,"calories_goal":1650.0,"protein_g":172.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-15","day_type":"Lift Only","calories":1658.0,"calories_goal":1800.0,"protein_g":189.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-16","day_type":"Lift Only","calories":1622.0,"calories_goal":1800.0,"protein_g":187.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-17","day_type":"Rest","calories":1589.0,"calories_goal":1650.0,"protein_g":160.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-18","day_type":"Rest","calories":1539.0,"calories_goal":1650.0,"protein_g":153.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-19","day_type":"Lift Only","calories":1679.0,"calories_goal":1800.0,"protein_g":167.1,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-20","day_type":"Rest","calories":1668.0,"calories_goal":1650.0,"protein_g":183.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-21","day_type":"Run Only","calories":1813.0,"calories_goal":1850.0,"protein_g":187.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-22","day_type":"Run Only","calories":1956.0,"calories_goal":1850.0,"protein_g":162.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-23","day_type":"Run Only","calories":1688.0,"calories_goal":1850.0,"protein_g":159.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-24","day_type":"Lift Only","calories":1766.0,"calories_goal":1800.0,"protein_g":187.4,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-25","day_type":"Rest","calories":1458.0,"calories_goal":1650.0,"protein_g":166.7,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-07-26","day_type":"Lift Only","calories":1892.0,"calories_goal":1800.0,"protein_g":170.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-27","day_type":"Lift + Run","calories":2083.0,"calories_goal":2000.0,"protein_g":161.5,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-28","day_type":"Run Only","calories":1690.0,"calories_goal":1850.0,"protein_g":172.4,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-29","day_type":"Run Only","calories":1843.0,"calories_goal":1850.0,"protein_g":161.1,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-30","day_type":"Run Only","calories":1938.0,"calories_goal":1850.0,"protein_g":179.2,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-07-31","day_type":"Run Only","calories":1836.0,"calories_goal":1850.0,"protein_g":178.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-01","day_type":"Lift + Run","calories":1962.0,"calories_goal":2000.0,"protein_g":180.1,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-02","day_type":"Run Only","calories":1677.0,"calories_goal":1850.0,"protein_g":156.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-03","day_type":"Rest","calories":1525.0,"calories_goal":1650.0,"protein_g":165.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-04","day_type":"Run Only","calories":2033.0,"calories_goal":1850.0,"protein_g":181.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-05","day_type":"Run Only","calories":1888.0,"calories_goal":1850.0,"protein_g":175.4,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-06","day_type":"Lift Only","calories":1718.0,"calories_goal":1800.0,"protein_g":174.6,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-07","day_type":"Rest","calories":1579.0,"calories_goal":1650.0,"protein_g":177.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-08","day_type":"Run Only","calories":1673.0,"calories_goal":1850.0,"protein_g":176.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-09","day_type":"Rest","calories":1457.0,"calories_goal":1650.0,"protein_g":160.3,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-08-10","day_type":"Rest","calories":1507.0,"calories_goal":1650.0,"protein_g":168.2,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-11","day_type":"Run Only","calories":1833.0,"calories_goal":1850.0,"protein_g":180.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-12","day_type":"Lift + Run","calories":1990.0,"calories_goal":2000.0,"protein_g":173.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-13","day_type":"Lift Only","calories":1628.0,"calories_goal":1800.0,"protein_g":159.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-14","day_type":"Run Only","calories":1989.0,"calories_goal":1850.0,"protein_g":191.6,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-15","day_type":"Run Only","calories":1565.0,"calories_goal":1850.0,"protein_g":163.8,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-08-16","day_type":"Run Only","calories":1862.0,"calories_goal":1850.0,"protein_g":187.1,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-17","day_type":"Rest","calories":1572.0,"calories_goal":1650.0,"protein_g":176.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-18","day_type":"Rest","calories":1735.0,"calories_goal":1650.0,"protein_g":189.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-19","day_type":"Rest","calories":1423.0,"calories_goal":1550.0,"protein_g":161.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-20","day_type":"Rest","calories":1440.0,"calories_goal":1550.0,"protein_g":163.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-21","day_type":"Lift + Run","calories":1983.0,"calories_goal":1900.0,"protein_g":193.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-22","day_type":"Rest","calories":1546.0,"calories_goal":1550.0,"protein_g":191.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-23","day_type":"Run Only","calories":1821.0,"calories_goal":1750.0,"protein_g":193.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-24","day_type":"Lift Only","calories":1668.0,"calories_goal":1700.0,"protein_g":167.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-25","day_type":"Rest","calories":1575.0,"calories_goal":1550.0,"protein_g":156.2,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-26","day_type":"Lift Only","calories":1652.0,"calories_goal":1700.0,"protein_g":189.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-27","day_type":"Lift Only","calories":1702.0,"calories_goal":1700.0,"protein_g":188.6,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-28","day_type":"Lift Only","calories":1491.0,"calories_goal":1700.0,"protein_g":159.3,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-08-29","day_type":"Lift Only","calories":1702.0,"calories_goal":1700.0,"protein_g":186.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-30","day_type":"Run Only","calories":1577.0,"calories_goal":1750.0,"protein_g":158.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-08-31","day_type":"Run Only","calories":1612.0,"calories_goal":1750.0,"protein_g":164.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-01","day_type":"Run Only","calories":1826.0,"calories_goal":1750.0,"protein_g":188.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-02","day_type":"Lift + Run","calories":1779.0,"calories_goal":1900.0,"protein_g":158.2,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-03","day_type":"Lift + Run","calories":1724.0,"calories_goal":1900.0,"protein_g":170.5,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-04","day_type":"Lift + Run","calories":1826.0,"calories_goal":1900.0,"protein_g":167.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-05","day_type":"Lift + Run","calories":1816.0,"calories_goal":1900.0,"protein_g":161.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-06","day_type":"Rest","calories":1563.0,"calories_goal":1550.0,"protein_g":188.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-07","day_type":"Lift + Run","calories":1762.0,"calories_goal":1900.0,"protein_g":161.3,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-08","day_type":"Run Only","calories":1834.0,"calories_goal":1750.0,"protein_g":191.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-09","day_type":"Run Only","calories":1562.0,"calories_goal":1750.0,"protein_g":179.1,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-09-10","day_type":"Lift + Run","calories":1863.0,"calories_goal":1900.0,"protein_g":181.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-11","day_type":"Rest","calories":1600.0,"calories_goal":1550.0,"protein_g":175.1,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-12","day_type":"Rest","calories":1518.0,"calories_goal":1550.0,"protein_g":176.2,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-13","day_type":"Rest","calories":1671.0,"calories_goal":1550.0,"protein_g":176.7,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-14","day_type":"Run Only","calories":1718.0,"calories_goal":1750.0,"protein_g":158.1,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-15","day_type":"Rest","calories":1553.0,"calories_goal":1550.0,"protein_g":186.9,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-16","day_type":"Run Only","calories":1672.0,"calories_goal":1750.0,"protein_g":177.8,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-17","day_type":"Lift + Run","calories":1780.0,"calories_goal":1900.0,"protein_g":168.0,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-18","day_type":"Rest","calories":1613.0,"calories_goal":1550.0,"protein_g":190.2,"protein_g_goal":180.0,"hit_calorie_goal":true},{"log_date":"2026-09-19","day_type":"Lift Only","calories":1491.0,"calories_goal":1700.0,"protein_g":159.9,"protein_g_goal":180.0,"hit_calorie_goal":false},{"log_date":"2026-09-20","day_type":"Rest","calories":1615.0,"calories_goal":1550.0,"protein_g":192.9,"protein_g_goal":180.0,"hit_calorie_goal":true}],"runs":[{"run_date":"2026-09-17","activity_name":"River Loop","distance_km":6.68,"avg_pace_s_per_km":331.5165,"avg_hr":145.9,"aerobic_decoupling_pct":0.0469,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-09-16","activity_name":"Evening Run","distance_km":8.31,"avg_pace_s_per_km":318.167,"avg_hr":146.9,"aerobic_decoupling_pct":0.0534,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-09-14","activity_name":"Evening Run","distance_km":3.38,"avg_pace_s_per_km":336.5868,"avg_hr":143.2,"aerobic_decoupling_pct":0.0604,"is_negative_split":false,"is_valid_run":true},{"run_date":"2026-09-10","activity_name":"Morning Run","distance_km":9.66,"avg_pace_s_per_km":319.2348,"avg_hr":147.6,"aerobic_decoupling_pct":0.044,"is_negative_split":false,"is_valid_run":true},{"run_date":"2026-09-09","activity_name":"Morning Run","distance_km":5.5,"avg_pace_s_per_km":312.1593,"avg_hr":145.0,"aerobic_decoupling_pct":0.0764,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-09-08","activity_name":"Morning Run","distance_km":8.98,"avg_pace_s_per_km":315.1027,"avg_hr":147.2,"aerobic_decoupling_pct":0.0635,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-09-07","activity_name":"Evening Run","distance_km":5.54,"avg_pace_s_per_km":331.7091,"avg_hr":145.3,"aerobic_decoupling_pct":0.0625,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-09-05","activity_name":"Morning Run","distance_km":5.71,"avg_pace_s_per_km":326.9669,"avg_hr":145.2,"aerobic_decoupling_pct":0.066,"is_negative_split":false,"is_valid_run":true},{"run_date":"2026-09-04","activity_name":"Afternoon Run","distance_km":5.59,"avg_pace_s_per_km":313.9206,"avg_hr":145.0,"aerobic_decoupling_pct":0.0754,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-09-03","activity_name":"River Loop","distance_km":5.04,"avg_pace_s_per_km":311.9543,"avg_hr":144.5,"aerobic_decoupling_pct":0.0717,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-09-02","activity_name":"Morning Run","distance_km":5.01,"avg_pace_s_per_km":308.3674,"avg_hr":144.5,"aerobic_decoupling_pct":0.0677,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-09-01","activity_name":"Evening Run","distance_km":6.55,"avg_pace_s_per_km":298.758,"avg_hr":145.6,"aerobic_decoupling_pct":0.0506,"is_negative_split":false,"is_valid_run":true},{"run_date":"2026-08-31","activity_name":"River Loop","distance_km":6.44,"avg_pace_s_per_km":328.4649,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-08-30","activity_name":"Morning Run","distance_km":5.8,"avg_pace_s_per_km":312.5862,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-08-23","activity_name":"Morning Run","distance_km":7.09,"avg_pace_s_per_km":331.9935,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":false,"is_valid_run":true},{"run_date":"2026-08-21","activity_name":"Morning Run","distance_km":8.63,"avg_pace_s_per_km":304.2486,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-08-16","activity_name":"Afternoon Run","distance_km":6.24,"avg_pace_s_per_km":323.3197,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-08-15","activity_name":"Evening Run","distance_km":4.09,"avg_pace_s_per_km":315.3957,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-08-14","activity_name":"Morning Run","distance_km":4.52,"avg_pace_s_per_km":342.0581,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-08-12","activity_name":"River Loop","distance_km":8.59,"avg_pace_s_per_km":324.8719,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-08-11","activity_name":"Afternoon Run","distance_km":7.15,"avg_pace_s_per_km":336.609,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":false,"is_valid_run":true},{"run_date":"2026-08-08","activity_name":"Evening Run","distance_km":4.29,"avg_pace_s_per_km":322.7311,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-08-05","activity_name":"Afternoon Run","distance_km":6.21,"avg_pace_s_per_km":326.5056,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-08-04","activity_name":"Evening Run","distance_km":6.63,"avg_pace_s_per_km":308.4445,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":false,"is_valid_run":true},{"run_date":"2026-08-02","activity_name":"River Loop","distance_km":3.93,"avg_pace_s_per_km":340.7762,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":false,"is_valid_run":true},{"run_date":"2026-08-01","activity_name":"River Loop","distance_km":4.34,"avg_pace_s_per_km":306.5222,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-07-31","activity_name":"Morning Run","distance_km":6.59,"avg_pace_s_per_km":343.1484,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-07-30","activity_name":"Evening Run","distance_km":8.58,"avg_pace_s_per_km":320.0839,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-07-29","activity_name":"Afternoon Run","distance_km":6.24,"avg_pace_s_per_km":334.4021,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-07-28","activity_name":"Evening Run","distance_km":7.49,"avg_pace_s_per_km":318.3626,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":false,"is_valid_run":true},{"run_date":"2026-07-27","activity_name":"Afternoon Run","distance_km":3.43,"avg_pace_s_per_km":328.4714,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":false,"is_valid_run":true},{"run_date":"2026-07-23","activity_name":"Afternoon Run","distance_km":6.7,"avg_pace_s_per_km":342.3063,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":true,"is_valid_run":true},{"run_date":"2026-07-22","activity_name":"Evening Run","distance_km":7.77,"avg_pace_s_per_km":302.765,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":false,"is_valid_run":true},{"run_date":"2026-07-21","activity_name":"Evening Run","distance_km":8.64,"avg_pace_s_per_km":334.8258,"avg_hr":null,"aerobic_decoupling_pct":null,"is_negative_split":false,"is_valid_run":true}]};
+
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const fmtPace = s => s == null ? "–" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+const pct = v => v == null ? "–" : `${Math.round(v * 100)}%`;
+const num = (v, d = 1) => v == null ? "–" : Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
+const dateObj = s => new Date(s + "T00:00:00");
+const fmtDate = (s, opts = {month: "short", day: "numeric"}) => dateObj(s).toLocaleDateString(undefined, opts);
+const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+
+function el(tag, attrs = {}, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function text(parent, attrs, content) { el("text", attrs, parent).textContent = content; }
+function niceMax(v) {
+  const p = Math.pow(10, Math.floor(Math.log10(v || 1)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
+  return 10 * p;
+}
+function frame(container, height) {
+  container.innerHTML = "";
+  const w = Math.max(container.clientWidth, 280);
+  const svg = el("svg", {viewBox: `0 0 ${w} ${height}`, height, role: "img"}, container);
+  const tip = document.createElement("div");
+  tip.className = "tip";
+  container.appendChild(tip);
+  return {svg, tip, w, h: height};
+}
+function yAxis(svg, m, w, h, yMin, yMax, ticks, fmt) {
+  for (let i = 0; i <= ticks; i++) {
+    const v = yMin + (yMax - yMin) * i / ticks, y = h - m.b - (h - m.t - m.b) * i / ticks;
+    el("line", {x1: m.l, x2: w - m.r, y1: y, y2: y, class: i === 0 ? "base" : "grid"}, svg);
+    text(svg, {x: m.l - 8, y: y + 3.5, "text-anchor": "end", class: "ax"}, fmt(v));
+  }
+}
+function xDateTicks(svg, rows, key, x, m, w, h) {
+  const n = rows.length, ticks = Math.min(Math.max(Math.floor((w - m.l) / 90), 2), n - 1);
+  for (let k = 0; k <= ticks; k++) {
+    const i = Math.round((n - 1) * k / ticks);
+    text(svg, {x: x(i), y: h - m.b + 16, "text-anchor": k === 0 ? "start" : k === ticks ? "end" : "middle", class: "ax"}, fmtDate(rows[i][key]));
+  }
+}
+function showTip(tip, container, html, x, y) {
+  tip.innerHTML = html;
+  tip.style.opacity = 1;
+  const cw = container.clientWidth, tw = tip.offsetWidth;
+  tip.style.left = Math.min(Math.max(x - tw / 2, 0), cw - tw) + "px";
+  tip.style.top = Math.max(y - tip.offsetHeight - 12, 0) + "px";
+}
+const hideTip = tip => { tip.style.opacity = 0; };
+// Convert a point in viewBox units to container pixels (the svg may be scaled).
+function toPx(svg, w, h, x, y) {
+  const b = svg.getBoundingClientRect();
+  return [x * b.width / w, y * b.height / h];
+}
+
+/* ---------- header, health, KPIs ---------- */
+function renderHeader() {
+  const m = DATA.meta, long = {month: "short", day: "numeric", year: "numeric"};
+  $("subhead").textContent = `${fmtDate(m.date_min, long)} – ${fmtDate(m.date_max, long)} · Strava runs joined with a daily macro log. Built ${m.built_at}.`;
+  $("sample-flag").hidden = m.dataset !== "sample";
+  $("footer").innerHTML = `Built from dbt marts in DuckDB by <code>scripts/build_dashboard.py</code><br>` +
+    `<a href="https://github.com/trevorlomba/run-analytics-dbt">github.com/trevorlomba/run-analytics-dbt</a>`;
+}
+const ICONS = {
+  good: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2l6.5 11.5h-13z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6.5v3.2M8 11.6v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  bad: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+};
+function renderHealth() {
+  const h = DATA.health, m = DATA.meta, row = $("health-chips");
+  const chip = (cls, label) => row.insertAdjacentHTML("beforeend", `<span class="chip ${cls}">${ICONS[cls]}${label}</span>`);
+  chip("good", `${h.pass} of ${h.total} tests passed`);
+  if (h.warn) chip("warn", `${h.warn} warning${h.warn > 1 ? "s" : ""}`);
+  chip(h.fail ? "bad" : "good", h.fail ? `${h.fail} failing` : "0 failing");
+  $("warn-list").innerHTML = h.warnings.map(w => {
+    let detail = w.message;
+    if (w.test === "warn_strava_sync_is_fresh") detail += ` Last run ${fmtDate(m.latest_run)}, last food log ${fmtDate(m.latest_log)}.`;
+    else if (w.failures) detail += ` ${w.failures} day${w.failures > 1 ? "s" : ""} flagged.`;
+    return `<li><code>${esc(w.test)}</code><span>${esc(detail)}</span></li>`;
+  }).join("");
+}
+function renderKpis() {
+  const k = DATA.kpis, ratios = DATA.load.filter(d => d.acute_chronic_ratio != null), last = ratios[ratios.length - 1];
+  const tiles = [
+    ["Runs", k.runs, `${num(k.km, 0)} km total`],
+    ["Protein goal hit", pct(k.protein_hit), `of ${k.goal_days} days with a goal`],
+    ["Calorie goal hit", pct(k.calorie_hit), "within ±10% of target"],
+    ["Acute : chronic", last ? num(last.acute_chronic_ratio, 2) : "–", last ? `as of ${fmtDate(last.date_day)}` : "needs 28 days of runs"],
+  ];
+  $("kpis").innerHTML = tiles.map(([l, v, f]) =>
+    `<div class="stat"><span class="label">${l}</span><span class="value">${v}</span><span class="foot">${f}</span></div>`).join("");
+}
+
+/* ---------- weekly volume bars ---------- */
+function firstRunWeek() {
+  const d = dateObj(DATA.load[0].date_day);
+  d.setDate(d.getDate() - (d.getDay() + 6) % 7);   // back up to Monday
+  return isoDay(d);
+}
+function renderWeekly() {
+  const c = $("weekly-chart"), start = firstRunWeek();
+  const end = DATA.load[DATA.load.length - 1].date_day;
+  const rows = DATA.weekly.filter(r => r.week_start >= start && r.week_start <= end);
+  const {svg, tip, w, h} = frame(c, 210);
+  const m = {t: 20, r: 8, b: 26, l: 44};
+  const yMax = niceMax(Math.max(...rows.map(r => r.run_km), 1));
+  yAxis(svg, m, w, h, 0, yMax, 4, v => `${v} km`);
+  const bw = (w - m.l - m.r) / rows.length, barW = Math.max(Math.min(bw - 2, 34), 3);
+  const y = v => h - m.b - (h - m.t - m.b) * v / yMax;
+  const maxRow = rows.reduce((a, b) => b.run_km > a.run_km ? b : a, rows[0]);
+  const labelEvery = Math.ceil(rows.length / Math.max(Math.floor((w - m.l) / 58), 1));
+  rows.forEach((r, i) => {
+    const cx = m.l + bw * i + bw / 2, top = y(r.run_km), x0 = cx - barW / 2;
+    if (r.run_km > 0) {
+      const rad = Math.min(4, barW / 2, h - m.b - top);
+      el("path", {d: `M${x0},${h - m.b} V${top + rad} Q${x0},${top} ${x0 + rad},${top} H${x0 + barW - rad} Q${x0 + barW},${top} ${x0 + barW},${top + rad} V${h - m.b} Z`, fill: "var(--accent)"}, svg);
+    }
+    if (i % labelEvery === 0) text(svg, {x: cx, y: h - m.b + 16, "text-anchor": "middle", class: "ax"}, fmtDate(r.week_start));
+    if (r === maxRow || i === rows.length - 1) text(svg, {x: cx, y: top - 6, "text-anchor": "middle", class: "dlabel"}, num(r.run_km, 1));
+    const hit = el("rect", {x: m.l + bw * i, y: m.t, width: bw, height: h - m.t - m.b, fill: "transparent"}, svg);
+    hit.addEventListener("pointerenter", () => showTip(tip, c,
+      `<b>Week of ${fmtDate(r.week_start)}</b><br>${r.runs} run${r.runs === 1 ? "" : "s"} · ${num(r.run_km, 1)} km` +
+      (r.long_run_km ? `<br>Long run ${num(r.long_run_km, 1)} km · avg ${fmtPace(r.avg_pace_s_per_km)}/km` : ""),
+      ...toPx(svg, w, h, cx, top)));
+    hit.addEventListener("pointerleave", () => hideTip(tip));
+  });
+}
+
+/* ---------- training load lines ---------- */
+function renderLoad() {
+  const c = $("load-chart"), rows = DATA.load;
+  const {svg, tip, w, h} = frame(c, 220);
+  const m = {t: 16, r: 12, b: 26, l: 44};
+  const yMax = niceMax(Math.max(...rows.map(r => Math.max(r.acute_7d_km, r.chronic_weekly_km || 0)), 1));
+  yAxis(svg, m, w, h, 0, yMax, 4, v => `${v} km`);
+  const n = rows.length, x = i => m.l + (w - m.l - m.r) * (n === 1 ? 0.5 : i / (n - 1));
+  const y = v => h - m.b - (h - m.t - m.b) * v / yMax;
+  const path = key => {
+    let d = "", pen = false;
+    rows.forEach((r, i) => {
+      if (r[key] == null) { pen = false; return; }
+      d += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(r[key]).toFixed(1)}`; pen = true;
+    });
+    return d;
+  };
+  el("path", {d: path("chronic_weekly_km"), fill: "none", stroke: "var(--ink-muted)", "stroke-width": 2, "stroke-dasharray": "5 4"}, svg);
+  el("path", {d: path("acute_7d_km"), fill: "none", stroke: "var(--accent)", "stroke-width": 2, "stroke-linejoin": "round"}, svg);
+  xDateTicks(svg, rows, "date_day", x, m, w, h);
+  el("circle", {cx: x(n - 1), cy: y(rows[n - 1].acute_7d_km), r: 4, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2}, svg);
+  const cross = el("line", {y1: m.t, y2: h - m.b, stroke: "var(--ink-faint)", "stroke-width": 1, opacity: 0}, svg);
+  const dot = el("circle", {r: 4, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2, opacity: 0}, svg);
+  const hit = el("rect", {x: m.l, y: m.t, width: w - m.l - m.r, height: h - m.t - m.b, fill: "transparent"}, svg);
+  hit.addEventListener("pointermove", e => {
+    const b = svg.getBoundingClientRect(), px = (e.clientX - b.left) * (w / b.width);
+    const i = Math.min(Math.max(Math.round((px - m.l) / (w - m.l - m.r) * (n - 1)), 0), n - 1), r = rows[i];
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("opacity", 1);
+    dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(r.acute_7d_km)); dot.setAttribute("opacity", 1);
+    showTip(tip, c, `<b>${fmtDate(r.date_day, {weekday: "short", month: "short", day: "numeric"})}</b><br>Last 7 days ${num(r.acute_7d_km, 1)} km` +
+      (r.chronic_weekly_km != null ? `<br>28-day weekly avg ${num(r.chronic_weekly_km, 1)} km<br>Ratio ${num(r.acute_chronic_ratio, 2)}` : "<br>Ratio needs 28 days of history") +
+      (r.run_km > 0 ? `<br>Ran ${num(r.run_km, 1)} km` : ""), ...toPx(svg, w, h, x(i), y(r.acute_7d_km)));
+  });
+  hit.addEventListener("pointerleave", () => { hideTip(tip); cross.setAttribute("opacity", 0); dot.setAttribute("opacity", 0); });
+
+  const ratios = rows.filter(r => r.acute_chronic_ratio != null);
+  const peak = ratios.reduce((a, b) => (!a || b.acute_chronic_ratio > a.acute_chronic_ratio ? b : a), null);
+  $("load-note").textContent = peak
+    ? `The ratio compares the last 7 days with the average week over the last 28. It peaked at ${num(peak.acute_chronic_ratio, 2)} on ${fmtDate(peak.date_day)}. Above about 1.3 usually signals a fast ramp in volume.`
+    : "The ratio appears once 28 days of run history exist.";
+  const lastCovered = rows[n - 1].date_day;
+  if (lastCovered < DATA.meta.date_max)
+    $("load-note").textContent += ` Run data ends ${fmtDate(lastCovered)} because the Strava sync stopped, so the chart stops there instead of showing false rest days.`;
+}
+
+/* ---------- calories vs goal band ---------- */
+function renderCalories() {
+  const c = $("cal-chart"), rows = DATA.nutrition;
+  const {svg, tip, w, h} = frame(c, 230);
+  const m = {t: 12, r: 10, b: 26, l: 48};
+  const hiVals = rows.flatMap(r => [r.calories, r.calories_goal ? r.calories_goal * 1.1 : 0]);
+  const loVals = rows.flatMap(r => [r.calories, r.calories_goal ? r.calories_goal * 0.9 : Infinity]);
+  const yMin = Math.floor(Math.min(...loVals) * 0.95 / 250) * 250;
+  const yMax = Math.ceil(Math.max(...hiVals) * 1.02 / 250) * 250;
+  const n = rows.length, x = i => m.l + (w - m.l - m.r) * (i + 0.5) / n;
+  const y = v => h - m.b - (h - m.t - m.b) * (v - yMin) / (yMax - yMin);
+  yAxis(svg, m, w, h, yMin, yMax, 4, v => Math.round(v).toLocaleString());
+  // Goal band: one flat step per day, broken wherever no goal applies.
+  const half = (w - m.l - m.r) / n / 2;
+  let top = [], bottom = [];
+  const flush = () => {
+    if (top.length) el("path", {d: "M" + top.concat(bottom.reverse()).join("L") + "Z", fill: "var(--accent-wash)", stroke: "var(--accent-soft)", "stroke-width": 1}, svg);
+    top = []; bottom = [];
+  };
+  rows.forEach((r, i) => {
+    if (!r.calories_goal) { flush(); return; }
+    const hi = y(r.calories_goal * 1.1).toFixed(1), lo = y(r.calories_goal * 0.9).toFixed(1);
+    top.push(`${(x(i) - half).toFixed(1)},${hi}`, `${(x(i) + half).toFixed(1)},${hi}`);
+    bottom.push(`${(x(i) - half).toFixed(1)},${lo}`, `${(x(i) + half).toFixed(1)},${lo}`);
+  });
+  flush();
+  xDateTicks(svg, rows, "log_date", x, m, w, h);
+  const r0 = Math.max(Math.min(half * 0.85, 3.5), 2);
+  rows.forEach((r, i) => {
+    el("circle", r.hit_calorie_goal === true
+      ? {cx: x(i), cy: y(r.calories), r: r0, fill: "var(--accent)"}
+      : {cx: x(i), cy: y(r.calories), r: r0 - 0.5, fill: "var(--surface)", stroke: "var(--hr)", "stroke-width": 1.5}, svg);
+    const hit = el("rect", {x: x(i) - half, y: m.t, width: half * 2, height: h - m.t - m.b, fill: "transparent"}, svg);
+    hit.addEventListener("pointerenter", () => showTip(tip, c,
+      `<b>${fmtDate(r.log_date, {weekday: "short", month: "short", day: "numeric"})}</b> · ${esc(r.day_type)}<br>` +
+      `${Math.round(r.calories).toLocaleString()} kcal` + (r.calories_goal ? ` vs ${Math.round(r.calories_goal).toLocaleString()} goal` : " · no goal set yet") +
+      `<br>Protein ${num(r.protein_g, 0)} g` + (r.protein_g_goal ? ` of ${num(r.protein_g_goal, 0)} g` : ""),
+      ...toPx(svg, w, h, x(i), y(r.calories))));
+    hit.addEventListener("pointerleave", () => hideTip(tip));
+  });
+}
+
+/* ---------- tables ---------- */
+function renderTables() {
+  $("runs-table").innerHTML = `<thead><tr><th>Date</th><th>Run</th><th>km</th><th>Pace /km</th><th>Avg HR</th><th>Decoupling</th></tr></thead><tbody>` +
+    DATA.runs.map(r => `<tr>
+      <td>${fmtDate(r.run_date)}</td>
+      <td><span class="name" title="${esc(r.activity_name)}">${esc(r.activity_name)}</span>${!r.is_valid_run ? '<span class="tag">accidental start</span>' : r.is_negative_split ? '<span class="tag good">negative split</span>' : ""}</td>
+      <td>${num(r.distance_km, 2)}</td>
+      <td>${fmtPace(r.avg_pace_s_per_km)}</td>
+      <td class="${r.avg_hr == null ? "muted" : ""}">${r.avg_hr == null ? "no HR" : Math.round(r.avg_hr)}</td>
+      <td class="${r.aerobic_decoupling_pct == null ? "muted" : ""}">${r.aerobic_decoupling_pct == null ? "–" : num(r.aerobic_decoupling_pct * 100, 1) + "%"}</td>
+    </tr>`).join("") + "</tbody>";
+  $("weekly-table").innerHTML = `<thead><tr><th>Week of</th><th>Runs</th><th>km</th><th>Long run</th><th>Pace /km</th><th>Avg kcal</th><th>Protein hit</th><th>Calorie hit</th></tr></thead><tbody>` +
+    DATA.weekly.slice().reverse().map(r => `<tr>
+      <td>${fmtDate(r.week_start)}</td><td>${r.runs}</td><td>${num(r.run_km, 1)}</td>
+      <td>${r.long_run_km == null ? "–" : num(r.long_run_km, 1)}</td><td>${fmtPace(r.avg_pace_s_per_km)}</td>
+      <td>${r.avg_calories == null ? "–" : Math.round(r.avg_calories).toLocaleString()}</td>
+      <td>${pct(r.protein_goal_hit_rate)}</td><td>${pct(r.calorie_goal_hit_rate)}</td></tr>`).join("") + "</tbody>";
+}
+
+function renderCharts() { renderWeekly(); renderLoad(); renderCalories(); }
+renderHeader(); renderHealth(); renderKpis(); renderTables(); renderCharts();
+let resizeTimer, lastWidth = document.querySelector(".wrap").clientWidth;
+new ResizeObserver(() => {
+  const wNow = document.querySelector(".wrap").clientWidth;
+  if (wNow === lastWidth) return;
+  lastWidth = wNow;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(renderCharts, 120);
+}).observe(document.querySelector(".wrap"));
+</script>
+
+</body>
+</html>

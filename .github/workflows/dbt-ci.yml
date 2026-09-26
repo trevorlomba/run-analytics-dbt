@@ -31,3 +31,7 @@ jobs:
       - name: dbt docs generate
         run: |
           dbt docs generate --vars '{raw_data_dir: data/sample}'
+
+      - name: Build the dashboard from the sample marts
+        run: |
+          python scripts/build_dashboard.py --sample --standalone --out dist/index.html

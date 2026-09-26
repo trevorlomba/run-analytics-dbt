@@ -7,7 +7,7 @@ models:
       - name: date_day
         data_tests: [unique, not_null]
       - name: has_strava_coverage
-        description: True from the first Strava-synced run onward. Earlier dates have no run data, not zero runs.
+        description: True between the first and last synced run. Outside that window there is no run data, which is not the same as zero runs.
 
   - name: fct_runs
     description: One row per run. Session totals, pacing profile, and HR/stream metrics.

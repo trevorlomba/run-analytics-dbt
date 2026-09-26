@@ -9,3 +9,5 @@ data/raw/*.csv
 .DS_Store
 .user.yml
 !data/sample/*.csv
+dist/
+.claude/
