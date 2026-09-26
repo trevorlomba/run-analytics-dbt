@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: int_activity__stream_metrics
+    description: Per-activity HR coverage, time in HR zones (zones as % of var hr_max), and aerobic decoupling.
+    columns:
+      - name: activity_id
+        data_tests: [unique, not_null]
+      - name: hr_coverage_pct
+        data_tests:
+          - value_in_range:
+              arguments: {min_value: 0, max_value: 1}
+
+  - name: int_activity__split_metrics
+    description: Per-activity pacing profile from full km splits.
+    columns:
+      - name: activity_id
+        data_tests: [unique, not_null]
+
+  - name: int_nutrition__daily_with_goals
+    description: Each logged day joined point-in-time to the macro targets in force that day.
+    columns:
+      - name: log_date
+        data_tests: [unique, not_null]
+
+unit_tests:
+  - name: goals_join_is_point_in_time
+    description: >
+      A day must pick up the targets valid on that date, not the latest ones.
+      Days before the first goal window get none.
+    model: int_nutrition__daily_with_goals
+    given:
+      - input: ref('stg_nutrition__dailies')
+        rows:
+          - {log_date: 2026-04-20, day_type: Rest, calories: 1600}
+          - {log_date: 2026-08-18, day_type: Rest, calories: 1600}
+          - {log_date: 2026-08-19, day_type: Rest, calories: 1600}
+      - input: ref('stg_nutrition__goals')
+        rows:
+          - {goal_id: "Rest|2026-05-01", day_type: Rest, valid_from: 2026-05-01, valid_to: 2026-08-19, calories_goal: 1650}
+          - {goal_id: "Rest|2026-08-19", day_type: Rest, valid_from: 2026-08-19, valid_to: null, calories_goal: 1550}
+    expect:
+      rows:
+        - {log_date: 2026-04-20, goal_id: null, calories_goal: null}
+        - {log_date: 2026-08-18, goal_id: "Rest|2026-05-01", calories_goal: 1650}
+        - {log_date: 2026-08-19, goal_id: "Rest|2026-08-19", calories_goal: 1550}

@@ -1,0 +1,76 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: Calendar covering every date with a run or a nutrition log.
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+      - name: has_strava_coverage
+        description: True from the first Strava-synced run onward. Earlier dates have no run data, not zero runs.
+
+  - name: fct_runs
+    description: One row per run. Session totals, pacing profile, and HR/stream metrics.
+    columns:
+      - name: activity_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_strava__activities')
+                field: activity_id
+      - name: avg_pace_s_per_km
+        description: Moving time divided by distance, in seconds per km.
+      - name: aerobic_decoupling_pct
+        description: >
+          Drop in efficiency (speed per heartbeat) from the first half to the second half.
+          Only computed when at least 80% of the run has HR data. Under 5% is generally
+          read as good aerobic fitness for the pace.
+      - name: is_negative_split
+        description: True when the second half of full km splits was faster than the first.
+      - name: is_valid_run
+        description: False for accidental starts under 200 m, which are excluded from aggregates.
+
+  - name: fct_daily_nutrition
+    description: One row per logged day. Intake vs. the targets in force that day, plus adherence flags.
+    columns:
+      - name: log_date
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: goal_id
+        description: Null for days before the first goal window (2026-05-01).
+      - name: hit_protein_goal
+        description: Protein at or above 95% of target.
+      - name: hit_calorie_goal
+        description: Calories within +/-10% of target.
+      - name: calories_3d_avg
+        description: Trailing 3-calendar-day average, matching the sheet's "3DA" convention.
+
+  - name: fct_training_load_daily
+    description: Daily run volume with 7-day acute and 28-day chronic load, for dates with Strava coverage.
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+      - name: acute_chronic_ratio
+        description: >
+          7-day km divided by the 28-day weekly average. Null until 28 days of history exist.
+          Values above ~1.3-1.5 flag a fast ramp in training volume.
+        data_tests:
+          - value_in_range:
+              arguments: {min_value: 0, max_value: 4}
+
+  - name: mart_weekly_summary
+    description: One row per ISO week. Running volume next to nutrition adherence.
+    columns:
+      - name: week_start
+        data_tests: [unique, not_null]
+      - name: protein_goal_hit_rate
+        data_tests:
+          - value_in_range:
+              arguments: {min_value: 0, max_value: 1}

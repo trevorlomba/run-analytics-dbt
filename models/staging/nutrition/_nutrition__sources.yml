@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: nutrition
+    description: Daily macro log and macro targets from the Macro Tracker sheet.
+    meta:
+      external_location: "read_csv('data/raw/nutrition_{name}.csv', all_varchar = true, header = true)"
+    tables:
+      - name: dailies
+        description: >
+          One row per logged day, plus spreadsheet debris: a repeated header row,
+          trailing formula rows with no date, and #REF!/#VALUE! errors.
+      - name: goals
+        description: >
+          Macro targets by day type, stored wide. Current targets sit in the plain
+          columns. The previous targets sit in columns suffixed with their
+          validity window, e.g. "Calories (5/1/26 - 8/18/26)".

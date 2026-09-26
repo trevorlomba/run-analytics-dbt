@@ -1,0 +1,10 @@
+.venv/
+target/
+dbt_packages/
+logs/
+*.duckdb
+*.duckdb.wal
+# Personal health and activity data stays local.
+data/raw/*.csv
+.DS_Store
+.user.yml

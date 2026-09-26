@@ -1,0 +1,26 @@
+name: run_analytics
+version: "1.0.0"
+config-version: 2
+profile: run_analytics
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # Upper bound for the heart-rate zone model; override with --vars.
+  hr_max: 190
+  # A run older than this many days means the Strava sync has stalled.
+  freshness_warn_days: 7
+
+models:
+  run_analytics:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: table

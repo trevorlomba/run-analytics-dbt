@@ -1,0 +1,75 @@
+version: 2
+
+models:
+  - name: stg_strava__activities
+    description: One row per Strava activity, deduplicated from the lap export.
+    columns:
+      - name: activity_id
+        description: Strava activity id.
+        data_tests: [unique, not_null]
+      - name: run_date
+        data_tests: [not_null]
+      - name: distance_m
+        data_tests:
+          - not_null
+          - value_in_range:
+              arguments:
+                min_value: 0
+                max_value: 50000
+
+  - name: stg_strava__km_splits
+    description: One row per kilometer split per activity.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [activity_id, split_number]
+    columns:
+      - name: activity_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_strava__activities')
+                field: activity_id
+      - name: pace_s_per_km
+        data_tests:
+          - value_in_range:
+              arguments:
+                min_value: 120    # 2:00/km: faster is a GPS glitch
+                max_value: 1200   # 20:00/km: slower is walking or stopped
+
+  - name: stg_strava__mile_splits
+    description: One row per mile split per activity.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [activity_id, split_number]
+    columns:
+      - name: activity_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_strava__activities')
+                field: activity_id
+
+  - name: stg_strava__streams
+    description: Second-by-second sensor samples. Heart rate is null before the HR monitor was in use.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [activity_id, elapsed_s]
+    columns:
+      - name: activity_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_strava__activities')
+                field: activity_id
+      - name: heart_rate_bpm
+        data_tests:
+          - value_in_range:
+              arguments:
+                min_value: 40
+                max_value: 220

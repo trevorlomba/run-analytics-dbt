@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: stg_nutrition__dailies
+    description: One row per logged day. Header debris and formula-only rows removed.
+    columns:
+      - name: log_date
+        data_tests: [unique, not_null]
+      - name: day_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Rest", "Run Only", "Lift Only", "Lift + Run"]
+      - name: calories
+        data_tests: [not_null]
+
+  - name: stg_nutrition__goals
+    description: >
+      Type-2 history of macro targets. One row per day type per validity window.
+      valid_to is exclusive; null means current.
+    data_tests:
+      - no_overlapping_windows:
+          arguments:
+            partition_by: day_type
+    columns:
+      - name: goal_id
+        data_tests: [unique, not_null]
+      - name: day_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["Rest", "Run Only", "Lift Only", "Lift + Run"]
