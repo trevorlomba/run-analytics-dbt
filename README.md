@@ -41,6 +41,11 @@ flowchart LR
   fr --> ft
   fr --> ws[mart_weekly_summary]
   fn --> ws
+  sk --> rs[fct_run_splits]
+  sm --> rs
+  fr --> rs
+  ss --> rp[fct_run_route_profile]
+  fr --> rp
 ```
 
 | Layer | Materialization | Purpose |
@@ -59,12 +64,20 @@ flowchart LR
 - **`fct_training_load_daily`** (one row per day): 7-day acute load, 28-day chronic load,
   and the acute:chronic workload ratio.
 - **`mart_weekly_summary`** (one row per ISO week): running volume next to nutrition adherence.
+- **`fct_run_splits`** (one row per run, unit and split): mile and km splits in one table, with
+  Strava's grade-adjusted pace parsed out of the sheet's `min.ss` text and partial final splits flagged.
+- **`fct_run_route_profile`** (one row per 100 m of each run): pace, elevation and HR along the
+  route, compressed from ~1 Hz streams (about 50k rows) to roughly 1.5k rows a chart can draw directly.
 - **`dim_date`**: calendar with a `has_strava_coverage` flag (first to last synced run), so "no data" is never confused with "no runs". A stalled sync can't masquerade as a week of rest.
 
 ## Dashboard
 
 `scripts/build_dashboard.py` renders a single-page dashboard from the marts:
-weekly volume, training load, calories against the goal band, and a runs table.
+weekly volume, pace by run, training load, calories against the goal band, a runs table,
+and a run explorer (splits with grade-adjusted pace, plus the route profile). Every panel
+follows one date-range control (7/14/30/60 days, all, or custom dates), with a mi/km switch
+and a Sunday/Monday week start. The page ships daily and per-run rows and does the weekly
+roll-up itself, so those controls work without a rebuild.
 It also reads dbt's own `target/run_results.json`, so the page opens with a
 **data-health strip**: tests passed, warnings, and a plain-language line for each
 warn-level monitor that fired.

@@ -8,6 +8,8 @@ select
     {{ clean_numeric('elapsed_time_s') }}
         / nullif({{ clean_numeric('distance_m') }}, 0) * 1609.344
                                                     as pace_s_per_mile,
+    -- Strava's grade-adjusted pace, which only exists as sheet text.
+    {{ pace_text_to_seconds('grade_adj_pace') }}     as grade_adj_pace_s_per_mile,
     {{ clean_numeric('avg_hr') }}                   as avg_hr,
     {{ clean_numeric('avg_grade_pct') }}            as avg_grade_pct,
     {{ clean_numeric('elev_gain_m') }}              as elev_gain_m,
