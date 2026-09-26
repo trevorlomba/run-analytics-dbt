@@ -74,3 +74,51 @@ models:
         data_tests:
           - value_in_range:
               arguments: {min_value: 0, max_value: 1}
+
+  - name: fct_run_splits
+    description: One row per split per valid run, in both miles (`split_unit = 'mi'`) and kilometers (`'km'`).
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [activity_id, split_unit, split_number]
+    columns:
+      - name: activity_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_runs')
+                field: activity_id
+      - name: split_unit
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['mi', 'km']
+      - name: pace_s_per_unit
+        description: Elapsed time over distance, in seconds per mile or per km depending on `split_unit`.
+      - name: grade_adj_pace_s_per_unit
+        description: Strava's grade-adjusted pace (the pace this effort would be on flat ground), same unit as `pace_s_per_unit`.
+      - name: is_partial_split
+        description: True for a run's final split when it covers less than 95% of a full mile or km.
+
+  - name: fct_run_route_profile
+    description: One row per 100 m segment of each valid run, aggregated from the second-by-second streams. Drives the route profile chart.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [activity_id, segment_index]
+    columns:
+      - name: activity_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_runs')
+                field: activity_id
+      - name: distance_m
+        description: Cumulative distance at the end of the segment.
+      - name: pace_s_per_km
+        description: Time spent covering the segment, per km. Stops inflate it; charts should clip outliers.
+        data_tests:
+          - value_in_range:
+              arguments: {min_value: 0, max_value: 86400}

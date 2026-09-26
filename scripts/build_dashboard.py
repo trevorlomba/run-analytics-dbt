@@ -7,6 +7,7 @@ Run after `dbt build` (it reads run_analytics.duckdb and target/run_results.json
 """
 import argparse
 import datetime as dt
+import decimal
 import json
 from pathlib import Path
 
@@ -27,11 +28,24 @@ def rows(con, sql):
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
+def grouped(con, sql, by_unit=False):
+    """Group row tuples by activity id (and split unit), dropping the key columns."""
+    out = {}
+    for r in con.execute(sql).fetchall():
+        if by_unit:
+            out.setdefault(r[0], {}).setdefault(r[1], []).append(list(r[2:]))
+        else:
+            out.setdefault(r[0], []).append(list(r[1:]))
+    return out
+
+
 def jsonable(v):
     if isinstance(v, (dt.date, dt.datetime)):
         return v.isoformat()[:10]
     if isinstance(v, float):
         return round(v, 4)
+    if isinstance(v, decimal.Decimal):
+        return float(v)
     return v
 
 
@@ -60,32 +74,31 @@ def main(out, sample, standalone):
                            from dim_date""")[0],
         },
         "health": test_health(),
-        "kpis": rows(con, """
-            select
-                (select count(*) from fct_runs where is_valid_run) as runs,
-                (select sum(distance_km) from fct_runs where is_valid_run) as km,
-                (select avg(case when hit_protein_goal then 1.0 else 0 end)
-                   from fct_daily_nutrition where goal_id is not null) as protein_hit,
-                (select avg(case when hit_calorie_goal then 1.0 else 0 end)
-                   from fct_daily_nutrition where goal_id is not null) as calorie_hit,
-                (select count(*) from fct_daily_nutrition where goal_id is not null) as goal_days
-        """)[0],
-        "weekly": rows(con, """
-            select week_start, runs, run_km, long_run_km, avg_pace_s_per_km,
-                   days_logged, avg_calories, avg_protein_g, protein_goal_hit_rate, calorie_goal_hit_rate
-            from mart_weekly_summary order by week_start"""),
+        # Everything below is daily or per-run grain; the page filters by date
+        # range and rolls weeks up itself, so the week start and units can change.
         "load": rows(con, """
             select date_day, run_km, acute_7d_km,
                    case when acute_chronic_ratio is not null then chronic_28d_km / 4 end as chronic_weekly_km,
                    acute_chronic_ratio
             from fct_training_load_daily order by date_day"""),
         "nutrition": rows(con, """
-            select log_date, day_type, calories, calories_goal, protein_g, protein_g_goal, hit_calorie_goal
+            select log_date, day_type, calories, calories_goal, protein_g, protein_g_goal,
+                   hit_calorie_goal, hit_protein_goal
             from fct_daily_nutrition order by log_date"""),
         "runs": rows(con, """
-            select run_date, activity_name, distance_km, avg_pace_s_per_km, avg_hr,
-                   aerobic_decoupling_pct, is_negative_split, is_valid_run
-            from fct_runs order by run_date desc, activity_id desc"""),
+            select cast(activity_id as varchar) as activity_id, run_date, activity_name,
+                   distance_km * 1000 as distance_m, moving_time_s, elapsed_time_s, elev_gain_m,
+                   avg_hr, max_hr, aerobic_decoupling_pct, is_negative_split, is_valid_run
+            from fct_runs order by run_date, activity_id"""),
+        # Compact arrays keep the embedded payload small (thousands of rows).
+        "splits": grouped(con, """
+            select cast(activity_id as varchar), split_unit, distance_m, elapsed_time_s,
+                   grade_adj_pace_s_per_unit, avg_hr, elev_gain_m, elev_loss_m, is_partial_split
+            from fct_run_splits order by activity_id, split_unit, split_number""", by_unit=True),
+        "profile": grouped(con, """
+            select cast(activity_id as varchar), round(distance_m), round(pace_s_per_km, 1),
+                   round(altitude_m, 1), round(avg_hr)
+            from fct_run_route_profile order by activity_id, segment_index"""),
     }
 
     def clean(o):
