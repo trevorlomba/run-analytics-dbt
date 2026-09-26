@@ -11,6 +11,8 @@ target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 
 vars:
+  # Where the raw CSVs live. CI and demos use the synthetic data/sample set.
+  raw_data_dir: data/raw
   # Upper bound for the heart-rate zone model; override with --vars.
   hr_max: 190
   # A run older than this many days means the Strava sync has stalled.

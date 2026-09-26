@@ -4,7 +4,7 @@ sources:
   - name: strava
     description: Strava activity detail exported from the Macro Tracker sheet by scripts/extract_sheet.py.
     meta:
-      external_location: "read_csv('data/raw/strava_{name}.csv', all_varchar = true, header = true)"
+      external_location: "read_csv('{{ var('raw_data_dir') }}/strava_{name}.csv', all_varchar = true, header = true)"
     tables:
       - name: laps
         description: One row per lap. Also carries session-level activity fields.

@@ -1,0 +1,5 @@
+Day Type,Calories,Protein (g),Carbs (g),Fat (g),Calories (5/1/26 - 8/18/26),Protein (g) (5/1/26 - 8/18/26),Carbs (g) (5/1/26 - 8/18/26),Fat (g) (5/1/26 - 8/18/26),Maintenance Calories,Maintenance Protein (g),Maintenance Carbs (g),Maintenance Fat (g)
+Rest,1550,180,75,55,1650,180,80,60,2275,180,230,70
+Lift Only,1700,180,100,57,1800,180,110,62,2540,180,300,70
+Run Only,1750,180,120,57,1850,180,130,62,2625,180,320,70
+Lift + Run,1900,180,145,60,2000,180,155,65,2800,180,350,75

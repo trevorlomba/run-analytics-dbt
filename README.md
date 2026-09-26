@@ -1,5 +1,7 @@
 # run-analytics-dbt
 
+[![dbt CI](https://github.com/trevorlomba/run-analytics-dbt/actions/workflows/dbt-ci.yml/badge.svg)](https://github.com/trevorlomba/run-analytics-dbt/actions/workflows/dbt-ci.yml)
+
 A dbt + DuckDB project that turns a personal training spreadsheet into tested,
 documented analytics tables. It joins **Strava run data** (laps, splits, and
 ~33k second-by-second sensor samples) with a **daily nutrition log** and
@@ -91,15 +93,33 @@ flowchart LR
 
 ## Run it
 
+With the bundled **synthetic sample data** (no personal data needed):
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python scripts/extract_sheet.py path/to/export.xlsx   # writes data/raw/*.csv
-dbt build                                              # models + tests
-dbt docs generate && dbt docs serve                    # browse lineage and docs
+dbt build --vars '{raw_data_dir: data/sample}'
+dbt docs generate --vars '{raw_data_dir: data/sample}' && dbt docs serve
 ```
 
-The raw data is personal and stays out of git (`data/raw/` is ignored).
+With a real export of the tracking sheet:
+
+```bash
+python scripts/extract_sheet.py path/to/export.xlsx   # writes data/raw/*.csv (git-ignored)
+dbt build
+```
+
+`scripts/make_sample_data.py` generates `data/sample/` with a fixed seed. It reproduces
+the real export's quirks (a repeated header row, `#REF!` cells, heart rate missing
+before the monitor arrived, 0.5 Hz sampling), so every cleaning rule and test runs in CI.
+
+## CI
+
+GitHub Actions runs on every push and pull request:
+
+1. Regenerate the sample data and fail if it differs from the committed copy.
+2. `dbt build` all models and tests on the sample data.
+3. `dbt docs generate`.
 
 ## Stack
 
