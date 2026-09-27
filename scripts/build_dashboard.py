@@ -88,7 +88,7 @@ def main(out, sample, standalone):
         "runs": rows(con, """
             select cast(activity_id as varchar) as activity_id, run_date, activity_name,
                    distance_km * 1000 as distance_m, moving_time_s, elapsed_time_s, elev_gain_m,
-                   avg_hr, max_hr, aerobic_decoupling_pct, is_negative_split, is_valid_run
+                   avg_hr, max_hr, aerobic_decoupling_pct, is_negative_split, is_valid_run, is_manual_entry
             from fct_runs order by run_date, activity_id"""),
         # Compact arrays keep the embedded payload small (thousands of rows).
         "splits": grouped(con, """
