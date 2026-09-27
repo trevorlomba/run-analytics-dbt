@@ -31,6 +31,8 @@ models:
         description: True when the second half of full km splits was faster than the first.
       - name: is_valid_run
         description: False for accidental starts under 200 m, which are excluded from aggregates.
+      - name: is_manual_entry
+        description: True for runs typed into Strava by hand. They count toward volume and pace but have no splits, streams or HR.
 
   - name: fct_daily_nutrition
     description: One row per logged day. Intake vs. the targets in force that day, plus adherence flags.

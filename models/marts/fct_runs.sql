@@ -24,6 +24,7 @@ select
     a.elev_gain_m,
     coalesce(a.avg_hr, s.avg_hr_time_weighted)                  as avg_hr,
     a.max_hr,
+    a.is_manual_entry,
     s.hr_coverage_pct,
     s.hr_zone_1_s, s.hr_zone_2_s, s.hr_zone_3_s, s.hr_zone_4_s, s.hr_zone_5_s,
     s.aerobic_decoupling_pct,

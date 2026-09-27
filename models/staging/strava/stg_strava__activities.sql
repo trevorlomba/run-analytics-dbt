@@ -19,5 +19,8 @@ select
     {{ clean_numeric('session_elapsed_time_s') }}            as elapsed_time_s,
     {{ clean_numeric('session_elev_gain_m') }}               as elev_gain_m,
     {{ clean_numeric('session_avg_hr') }}                    as avg_hr,
-    {{ clean_numeric('session_max_hr') }}                    as max_hr
+    {{ clean_numeric('session_max_hr') }}                    as max_hr,
+    -- The importer writes one summary lap named 'Manual entry' for activities
+    -- typed in by hand (no GPS, so no splits or streams).
+    coalesce(name = 'Manual entry', false)                   as is_manual_entry
 from deduped

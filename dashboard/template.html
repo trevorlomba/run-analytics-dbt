@@ -610,7 +610,7 @@ function renderRunsTable() {
       const pickable = x.is_valid_run && DATA.splits[x.activity_id];
       return `<tr${pickable ? ` class="pick${x.activity_id === state.runId ? " selected" : ""}" tabindex="0" data-id="${x.activity_id}"` : ""}>
       <td>${fmtDate(x.run_date)}</td>
-      <td><span class="name" title="${esc(x.activity_name)}">${esc(x.activity_name)}</span>${!x.is_valid_run ? '<span class="tag">accidental start</span>' : x.is_negative_split ? '<span class="tag good">negative split</span>' : ""}</td>
+      <td><span class="name" title="${esc(x.activity_name)}">${esc(x.activity_name)}</span>${!x.is_valid_run ? '<span class="tag">accidental start</span>' : x.is_manual_entry ? '<span class="tag">manual entry</span>' : x.is_negative_split ? '<span class="tag good">negative split</span>' : ""}</td>
       <td>${num(dist(x.distance_m), 2)}</td>
       <td>${x.is_valid_run ? fmtPace(runPace(x)) : "–"}</td>
       <td class="${x.avg_hr == null ? "muted" : ""}">${x.avg_hr == null ? "no HR" : Math.round(x.avg_hr)}</td>
