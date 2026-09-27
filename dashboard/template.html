@@ -27,6 +27,11 @@
     color-scheme:dark;
   }
   *{box-sizing:border-box}
+  /* Charts and rows respond to touch; a long press shouldn't select text,
+     flash a highlight box, or open the iOS callout menu. Form controls keep
+     their normal behavior. */
+  body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+  input,select,textarea{-webkit-user-select:auto;user-select:auto}
   [hidden]{display:none!important}
   body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;padding-block:24px 40px;padding-inline:16px;margin:0}
   .wrap{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
