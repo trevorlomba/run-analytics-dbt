@@ -124,6 +124,7 @@
   .key-area{width:14px;height:10px;background:var(--surface-2);border-top:1.5px solid var(--ink-faint)}
   .key-hr{width:14px;height:0;border-top:2px solid var(--hr)}
   .reps{display:flex;flex-direction:column;gap:10px}
+  .gps{display:block;font-size:11px;color:var(--ink-faint);margin-top:1px}
   .caption{font-size:11.5px;color:var(--ink-faint);margin:-2px 0 4px;line-height:1.45}
   td.faster{color:var(--good)}
   td.slower{color:var(--warn)}
@@ -202,7 +203,7 @@
       </div>
       <div class="chart" id="reps-chart"></div>
       <div class="table-wrap"><table id="reps-table"></table></div>
-      <p class="caption">Detected from GPS speed, no lap button needed · times ±1 s · distances rounded to the nearest standard rep</p>
+      <p class="caption">Detected from GPS speed, no lap button needed · times ±1 s · distance rounded to a standard length, GPS reading below it</p>
     </div>
     <div class="panel-head">
       <span class="sub-title" id="splits-title">Splits</span>
@@ -725,8 +726,9 @@ function renderReps(reps) {
   $("reps-block").hidden = !reps.length;
   if (!reps.length) return;
   const c = $("reps-chart"), u = U();
-  // r = [distance_m, time_s, vs_avg_s, avg_hr, recovery_s, recovery_m, is_fastest]
-  const rs = reps.map((r, i) => ({i, m: r[0], t: r[1], vs: r[2], hr: r[3], recT: r[4], recM: r[5], best: r[6]}));
+  // r = [distance_m, time_s, vs_avg_s, avg_hr, recovery_s, recovery_m, is_fastest, gps_m]
+  // gps_m is the raw GPS distance, set only when the rep was rounded to a standard length.
+  const rs = reps.map((r, i) => ({i, m: r[0], t: r[1], vs: r[2], hr: r[3], recT: r[4], recM: r[5], best: r[6], gps: r[7]}));
   // One distance: compare rep times directly. A ladder: compare pace instead.
   const same = rs.every(r => r.m === rs[0].m);
   const val = r => same ? r.t : r.t / r.m * u.m, fmtVal = same ? fmtTime : fmtPace;
@@ -749,7 +751,7 @@ function renderReps(reps) {
     text(svg, {x: cx, y: h - m.b + 16, "text-anchor": "middle", class: "ax"}, same || bw < 40 ? `${r.i + 1}` : `${r.m}`);
     const hit = el("rect", {x: m.l + bw * r.i, y: m.t, width: bw, height: base - m.t, fill: "transparent"}, svg);
     hit.addEventListener("pointerenter", () => showTip(tip, c,
-      `<b>Rep ${r.i + 1} · ${fmtTime(r.t)}</b> for ${r.m} m${r.best ? " · fastest" : ""}` +
+      `<b>Rep ${r.i + 1} · ${fmtTime(r.t)}</b> for ${r.m} m${r.gps ? ` (GPS ${r.gps} m)` : ""}${r.best ? " · fastest" : ""}` +
       `<br>${fmtPace(r.t / r.m * u.m)}/${u.label}${r.hr ? ` · ${r.hr} bpm` : ""}`,
       ...toPx(svg, w, h, cx, top)));
     hit.addEventListener("pointerleave", () => hideTip(tip));
@@ -760,7 +762,7 @@ function renderReps(reps) {
   $("reps-table").innerHTML = `<thead><tr><th>Rep</th><th>Distance</th><th>Time</th><th>Pace /${u.label}</th><th>vs avg</th><th>Recovery</th><th>Avg HR</th></tr></thead><tbody>` +
     rs.map(r => `<tr>
       <td>${r.i + 1}${r.best ? '<span class="tag good">fastest</span>' : ""}</td>
-      <td>${r.m} m</td>
+      <td>${r.m} m${r.gps ? `<span class="gps">GPS ${r.gps}</span>` : ""}</td>
       <td><b>${fmtTime(r.t)}</b></td>
       <td>${fmtPace(r.t / r.m * u.m)}</td>
       <td class="${r.vs <= -0.5 ? "faster" : r.vs >= 0.5 ? "slower" : "muted"}">${r.vs > 0 ? "+" : r.vs < 0 ? "−" : "±"}${num(Math.abs(r.vs), 1)} s</td>
