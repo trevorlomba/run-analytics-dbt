@@ -125,6 +125,14 @@
   .key-hr{width:14px;height:0;border-top:2px solid var(--hr)}
   .reps{display:flex;flex-direction:column;gap:10px}
   .gps{display:block;font-size:11px;color:var(--ink-faint);margin-top:1px}
+  .reps-tools{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border);padding-top:10px}
+  .reps-tools .caption{margin:0}
+  #reps-body[hidden] + .reps-tools{border-top:0;padding-top:0}
+  .reps-tools .caption:empty{display:none}
+  .hint-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--ink-muted)}
+  .hint-form input{font:inherit;font-size:16px;color:var(--ink);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:5px 9px;width:14em;max-width:100%}
+  .hint-form input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .pill:disabled{opacity:.55;cursor:default}
   .caption{font-size:11.5px;color:var(--ink-faint);margin:-2px 0 4px;line-height:1.45}
   td.faster{color:var(--good)}
   td.slower{color:var(--warn)}
@@ -185,25 +193,31 @@
 
   <div class="section-label">Runs</div>
 
-  <section class="panel">
-    <div class="panel-head"><span class="panel-title">Runs</span><span class="mart">fct_runs</span></div>
-    <p class="panel-note">Select a run to open it in the explorer below.</p>
-    <div class="table-wrap"><table id="runs-table"></table></div>
-  </section>
-
   <section class="panel" id="explorer">
     <div class="panel-head"><span class="panel-title">Run explorer</span><span class="mart">fct_run_splits · fct_workout_reps · fct_run_route_profile</span></div>
     <label class="sub-title" for="run-select">Run</label>
     <select id="run-select"></select>
     <div class="run-stats" id="run-stats"></div>
     <div class="reps" id="reps-block" hidden>
-      <div class="panel-head">
-        <span class="sub-title" id="reps-title">Reps</span>
-        <div class="legend"><span><i class="key-bar"></i>Rep</span><span><i class="key-line dash"></i>Session average</span></div>
+      <div class="reps" id="reps-body">
+        <div class="panel-head">
+          <span class="sub-title" id="reps-title">Reps</span>
+          <div class="legend"><span><i class="key-bar"></i>Rep</span><span id="reps-avg-key"><i class="key-line dash"></i>Session average</span></div>
+        </div>
+        <div class="chart" id="reps-chart"></div>
+        <div class="table-wrap"><table id="reps-table"></table></div>
+        <p class="caption" id="reps-caption"></p>
       </div>
-      <div class="chart" id="reps-chart"></div>
-      <div class="table-wrap"><table id="reps-table"></table></div>
-      <p class="caption">Detected from GPS speed, no lap button needed · times ±1 s · distance rounded to a standard length, GPS reading below it</p>
+      <div class="reps-tools" id="reps-tools" hidden>
+        <p class="caption" id="reps-source"></p>
+        <form class="hint-form" id="hint-form" hidden>
+          <label for="hint-input">Tell it the workout</label>
+          <input id="hint-input" placeholder="e.g. 4 x 800 or 1x200, 3x800" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" maxlength="20">
+          <button type="submit" class="pill" id="hint-apply">Apply</button>
+          <button type="button" class="pill" id="reps-reset" hidden>Reset to detected</button>
+        </form>
+        <p class="caption" id="reps-status" aria-live="polite"></p>
+      </div>
     </div>
     <div class="panel-head">
       <span class="sub-title" id="splits-title">Splits</span>
@@ -212,7 +226,7 @@
     <div class="chart" id="splits-chart"></div>
     <div class="panel-head">
       <span class="sub-title">Along the route · ~500 m rolling pace</span>
-      <div class="legend"><span><i class="key-line"></i>Pace</span><span><i class="key-area"></i>Elevation</span><span id="hr-key"><i class="key-hr"></i>Heart rate</span></div>
+      <div class="legend"><span><i class="key-line"></i>Pace</span><span><i class="key-area"></i>Elevation</span><span id="rep-key" hidden><i class="key-band"></i>Reps</span><span id="hr-key"><i class="key-hr"></i>Heart rate</span></div>
     </div>
     <div class="chart" id="profile-chart"></div>
   </section>
@@ -221,6 +235,14 @@
     <details>
       <summary>Weekly table</summary>
       <div class="table-wrap" style="margin-top:10px"><table id="weekly-table"></table></div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <details>
+      <summary>All runs</summary>
+      <p class="panel-note" style="margin-top:10px">Select a run to open it in the explorer above.</p>
+      <div class="table-wrap" style="margin-top:6px"><table id="runs-table"></table></div>
     </details>
   </section>
 
@@ -686,10 +708,9 @@ function renderRun() {
     x.workout_label ? `<span class="tag" style="margin:0">${esc(x.workout_label)}</span>` : "",
     x.is_negative_split ? `<span class="tag good" style="margin:0">negative split</span>` : "",
   ].join("");
-  renderReps(DATA.reps[x.activity_id] || []);
+  renderReps(x.activity_id);
   $("splits-title").textContent = state.units === "mi" ? "Mile splits" : "Kilometer splits";
-  renderSplits(splits);
-  renderProfile(DATA.profile[x.activity_id] || []);
+  renderSplits(splits);   // the route profile is drawn by renderReps, so it can mark the reps
 }
 function renderSplits(splits) {
   const c = $("splits-chart"), u = U();
@@ -720,19 +741,177 @@ function renderSplits(splits) {
     hit.addEventListener("pointerleave", () => hideTip(tip));
   });
 }
+/* ---------- reps: detected by dbt, or set by the owner and kept in the page's db store ---------- */
+// Views without the store (or other people's views) just show what's saved or detected.
+const repStore = {db: null, owner: false};
+(async () => {
+  try {
+    if (!(window.claude && claude.use)) return;
+    const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
+    repStore.db = db;
+    repStore.owner = !!(db && user && await user.isOwner());
+    if (db && state.runId) renderReps(state.runId);
+  } catch (e) { /* no store: detection only */ }
+})();
+const savedReps = {};            // runId -> saved body, or null when none; absent until read
+const loadingSaved = new Set();
+async function loadSaved(runId) {
+  if (!repStore.db || runId in savedReps || loadingSaved.has(runId)) return;
+  loadingSaved.add(runId);
+  try { const snap = await repStore.db.doc("manual_reps/" + runId).get(); savedReps[runId] = snap.exists ? snap.data() : null; }
+  catch (e) { savedReps[runId] = null; }
+  loadingSaved.delete(runId);
+  if (state.runId === runId) renderReps(runId);
+}
+const fmtStamp = iso => new Date(iso).toLocaleString(undefined, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
+const fmtMetres = m => m % 1000 === 0 && m >= 1000 ? `${m / 1000} km` : m === 1609 ? "1 mi" : `${m} m`;
+
+// Recent runs carry their speed stream as [dt[], d_dm[], v_cms[]] (delta-encoded); decode once.
+function streamOf(runId) {
+  const s = DATA.streams && DATA.streams[runId];
+  if (!s || s.t) return s || null;
+  const t = [], d = [];
+  let a = 0, b = 0;
+  for (let i = 0; i < s[0].length; i++) { a += s[0][i]; b += s[1][i]; t.push(a); d.push(b / 10); }
+  return (DATA.streams[runId] = {t, d, v: s[2].map(x => x / 100)});
+}
+
+// "4 x 800", "6x1k", "3 × 1 mi", or a mix in order: "1x100, 1x200, 3x800" -> [{n, m}, ...]
+function parseHint(text) {
+  const parts = String(text).toLowerCase().split(/,|\+|&|\band\b/).map(p => p.replace(/\s+/g, "")).filter(Boolean);
+  if (!parts.length || parts.length > 10) return null;
+  const sets = [];
+  for (const p of parts) {
+    const x = p.match(/^(?:(\d{1,2})[x×*])?(\d+(?:\.\d+)?)(m|k|km|mi|mile|miles)?$/);
+    if (!x) return null;
+    const n = x[1] ? +x[1] : 1, d = +x[2], unit = x[3] || (d < 20 ? "k" : "m");
+    const m = Math.round(unit === "m" ? d : unit.startsWith("mi") ? d * 1609.344 : d * 1000);
+    if (n < 1 || m < 100 || m > 10000) return null;
+    sets.push({n, m});
+  }
+  return sets.reduce((a, x) => a + x.n, 0) <= 30 ? sets : null;
+}
+const hintLabel = sets => sets.map(x => `${x.n} × ${fmtMetres(x.m)}`).join(" + ");
+
+// Find the n fastest, non-overlapping stretches covering about m metres, then move each edge
+// to where raw speed crosses halfway between the rep's pace and the pace beside it and stays
+// clearly below rep pace for ~6 s (so GPS wobble isn't an edge), interpolating between samples.
+function findReps(st, sets) {
+  const {t, d, v} = st, len = t.length;
+  const back = new Array(len), fwd = new Array(len);      // mean speed over the 6 s before / after each sample
+  for (let i = 0, lo = 0, sum = 0; i < len; i++) {
+    sum += v[i];
+    while (t[lo] < t[i] - 6) sum -= v[lo++];
+    back[i] = sum / (i - lo + 1);
+  }
+  for (let i = len - 1, hi = len - 1, sum = 0; i >= 0; i--) {
+    sum += v[i];
+    while (t[hi] > t[i] + 6) sum -= v[hi--];
+    fwd[i] = sum / (hi - i + 1);
+  }
+  // Longest sets first: the fastest 100 m of a session is usually inside an 800, so short
+  // reps are only placed in the gaps the long ones leave.
+  const picked = [];
+  for (const {n, m} of sets.slice().sort((a, b) => b.m - a.m)) {
+    const wins = [];
+    for (let i = 0, j = 0; i < len; i++) {
+      if (j < i) j = i;
+      while (j < len && d[j] - d[i] < m) j++;
+      if (j >= len) break;
+      wins.push({i, j, m, speed: (d[j] - d[i]) / Math.max(t[j] - t[i], 1)});
+    }
+    wins.sort((a, b) => b.speed - a.speed);
+    let got = 0;
+    for (const w of wins) {
+      if (got === n) break;
+      if (!picked.some(p => t[w.i] < t[p.j] + 10 && t[w.j] > t[p.i] - 10)) { picked.push(w); got++; }
+    }
+  }
+  picked.sort((a, b) => a.i - b.i);
+  const mean = (a, b) => { let s = 0, c = 0; for (let k = 0; k < len; k++) if (t[k] >= a && t[k] <= b) { s += v[k]; c++; } return c ? s / c : null; };
+  const distAt = tt => {
+    let k = 0;
+    while (k < len - 1 && t[k + 1] <= tt) k++;
+    return k < len - 1 ? d[k] + (tt - t[k]) / (t[k + 1] - t[k]) * (d[k + 1] - d[k]) : d[k];
+  };
+  const out = [];
+  picked.forEach((w, q) => {
+    const repV = mean(t[w.i], t[w.j]);
+    const up = ((mean(t[w.i] - 50, t[w.i] - 20) ?? repV) + repV) / 2;
+    const dn = ((mean(t[w.j] + 20, t[w.j] + 50) ?? repV) + repV) / 2;
+    // "Stays low" means clearly under rep pace: 3/4 of the way from the outside pace to it.
+    const upStay = (up + repV) / 2, dnStay = (dn + repV) / 2;
+    const floor = q ? picked[q - 1].j : 0, ceil = q < picked.length - 1 ? picked[q + 1].i : len - 1;
+    // Start: skip any slow lead-in inside the window, walk back to where speed drops and stays low.
+    let a = w.i;
+    while (a < w.j && fwd[a] < up) a++;
+    while (a > floor + 1 && !(v[a - 1] < up && back[a - 1] < upStay)) a--;
+    while (a < w.j && v[a] < up) a++;
+    const start = a > 0 && v[a - 1] < up ? t[a - 1] + (up - v[a - 1]) / (v[a] - v[a - 1]) * (t[a] - t[a - 1]) : t[a];
+    // End: the same, mirrored.
+    let b = w.j;
+    while (b > a && back[b] < dn) b--;
+    while (b < ceil - 1 && !(v[b + 1] < dn && fwd[b + 1] < dnStay)) b++;
+    while (b > a && v[b] < dn) b--;
+    const end = b < len - 1 && v[b + 1] < dn ? t[b] + (v[b] - dn) / (v[b] - v[b + 1]) * (t[b + 1] - t[b]) : t[b];
+    if (end - start >= 10) out.push({start, end, m: w.m, gps: distAt(end) - distAt(start)});
+  });
+  return out.map((r, k) => ({
+    rep: k + 1, start_s: +r.start.toFixed(1), time_s: +(r.end - r.start).toFixed(1), distance_m: r.m,
+    gps_distance_m: Math.round(r.gps), start_distance_m: Math.round(distAt(r.start)),
+    rec_time_s: k ? +(r.start - out[k - 1].end).toFixed(1) : null,
+    rec_distance_m: k ? Math.round(distAt(r.start) - distAt(out[k - 1].end)) : null,
+  }));
+}
+
+// Both sources become the same row shape: {i, m, t, vs, hr, recT, recM, best, gps, sT, sD}
+// (sT / sD: seconds and GPS metres into the run where the rep started).
+function fromDetected(reps) {
+  // r = [distance_m, time_s, vs_avg_s, avg_hr, recovery_s, recovery_m, is_fastest, gps_m, start_s, start_m]
+  return reps.map((r, i) => ({i, m: r[0], t: r[1], vs: r[2], hr: r[3], recT: r[4], recM: r[5], best: r[6], gps: r[7], sT: r[8] ?? null, sD: r[9] ?? null}));
+}
+function fromSaved(body) {
+  const num_ = x => Number.isFinite(+x) && x !== null && x !== "" ? +x : null;
+  const rs = (Array.isArray(body.reps) ? body.reps : [])
+    .map(r => ({m: Math.round(num_(r.distance_m) || 0), t: num_(r.time_s) || 0, hr: num_(r.avg_hr), recT: num_(r.rec_time_s), recM: num_(r.rec_distance_m), gps: num_(r.gps_distance_m), sT: num_(r.start_s), sD: num_(r.start_distance_m)}))
+    .filter(r => r.m > 0 && r.t > 0)
+    .map((r, i) => ({...r, i}));
+  const byDist = {};
+  rs.forEach(r => (byDist[r.m] = byDist[r.m] || []).push(r.t));
+  rs.forEach(r => {
+    const a = byDist[r.m];
+    r.vs = a.length > 1 ? r.t - a.reduce((x, y) => x + y, 0) / a.length : null;   // a single rep has nothing to compare with
+    r.best = a.length > 1 && r.t === Math.min(...a);
+  });
+  return rs;
+}
+
 // Rep times as m:ss, rounding before splitting so 2:59.6 reads 3:00, not 2:60.
 const fmtTime = s => { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
-function renderReps(reps) {
-  $("reps-block").hidden = !reps.length;
-  if (!reps.length) return;
+let toolsRunId = null, repBands = [];
+function renderReps(runId) {
+  const rs = drawReps(runId);
+  repBands = rs.filter(r => r.sD != null);
+  renderProfile(DATA.profile[runId] || []);
+}
+function drawReps(runId) {
+  loadSaved(runId);
+  const saved = savedReps[runId] || null;
+  const rs = saved ? fromSaved(saved) : fromDetected(DATA.reps[runId] || []);
+  const canHint = !!(repStore.owner && DATA.streams && DATA.streams[runId]);
+  $("reps-block").hidden = !rs.length && !saved && !canHint;
+  $("reps-body").hidden = !rs.length;
+  renderRepTools(runId, saved, rs.length, canHint);
+  if (!rs.length) return rs;
+  $("reps-caption").textContent = saved
+    ? "Found from your hint, using GPS speed · times ±1 s · distance as you gave it, GPS reading below it"
+    : "Detected from GPS speed, no lap button needed · times ±1 s · distance rounded to a standard length, GPS reading below it";
   const c = $("reps-chart"), u = U();
-  // r = [distance_m, time_s, vs_avg_s, avg_hr, recovery_s, recovery_m, is_fastest, gps_m]
-  // gps_m is the raw GPS distance, set only when the rep was rounded to a standard length.
-  const rs = reps.map((r, i) => ({i, m: r[0], t: r[1], vs: r[2], hr: r[3], recT: r[4], recM: r[5], best: r[6], gps: r[7]}));
   // One distance: compare rep times directly. A ladder: compare pace instead.
   const same = rs.every(r => r.m === rs[0].m);
   const val = r => same ? r.t : r.t / r.m * u.m, fmtVal = same ? fmtTime : fmtPace;
-  $("reps-title").textContent = same ? `Reps · ${rs.length} × ${rs[0].m} m` : `Reps · pace /${u.label}`;
+  $("reps-title").textContent = same ? `Reps · ${rs.length} × ${fmtMetres(rs[0].m)}` : `Reps · pace /${u.label}`;
+  $("reps-title").title = saved && saved.hint_label ? saved.hint_label : "";
   const avg = rs.reduce((a, r) => a + val(r), 0) / rs.length;
   const {svg, tip, w, h} = frame(c, 190);
   const m = {t: 22, r: 8, b: 26, l: 48};
@@ -751,25 +930,93 @@ function renderReps(reps) {
     text(svg, {x: cx, y: h - m.b + 16, "text-anchor": "middle", class: "ax"}, same || bw < 40 ? `${r.i + 1}` : `${r.m}`);
     const hit = el("rect", {x: m.l + bw * r.i, y: m.t, width: bw, height: base - m.t, fill: "transparent"}, svg);
     hit.addEventListener("pointerenter", () => showTip(tip, c,
-      `<b>Rep ${r.i + 1} · ${fmtTime(r.t)}</b> for ${r.m} m${r.gps ? ` (GPS ${r.gps} m)` : ""}${r.best ? " · fastest" : ""}` +
-      `<br>${fmtPace(r.t / r.m * u.m)}/${u.label}${r.hr ? ` · ${r.hr} bpm` : ""}`,
+      `<b>Rep ${r.i + 1} · ${fmtTime(r.t)}</b> for ${fmtMetres(r.m)}${r.gps ? ` (GPS ${r.gps} m)` : ""}${r.best ? " · fastest" : ""}` +
+      `<br>${fmtPace(r.t / r.m * u.m)}/${u.label}${r.hr ? ` · ${r.hr} bpm` : ""}` +
+      (r.sD != null ? `<br>Started at ${num(dist(r.sD), 2)} ${u.label}` : ""),
       ...toPx(svg, w, h, cx, top)));
     hit.addEventListener("pointerleave", () => hideTip(tip));
   });
-  el("line", {x1: m.l, x2: w - m.r, y1: y(avg), y2: y(avg), stroke: "var(--ink-muted)", "stroke-width": 1.5, "stroke-dasharray": "5 4"}, svg);
+  if (same) el("line", {x1: m.l, x2: w - m.r, y1: y(avg), y2: y(avg), stroke: "var(--ink-muted)", "stroke-width": 1.5, "stroke-dasharray": "5 4"}, svg);
+  $("reps-avg-key").hidden = !same;
 
-  const rec = r => r.recT == null ? "–" : `${fmtTime(r.recT)}${r.recM != null && r.recM < 50 ? " standing" : r.recM != null ? ` · ${Math.round(r.recM)} m` : ""}`;
-  $("reps-table").innerHTML = `<thead><tr><th>Rep</th><th>Distance</th><th>Time</th><th>Pace /${u.label}</th><th>vs avg</th><th>Recovery</th><th>Avg HR</th></tr></thead><tbody>` +
+  const rec = r => r.recT == null ? "–" : fmtTime(r.recT);
+  $("reps-table").innerHTML = `<thead><tr><th>Rep</th><th>Start</th><th>Distance</th><th>Time</th><th>Pace /${u.label}</th><th>vs avg</th><th>Rest</th><th>Avg HR</th></tr></thead><tbody>` +
     rs.map(r => `<tr>
       <td>${r.i + 1}${r.best ? '<span class="tag good">fastest</span>' : ""}</td>
-      <td>${r.m} m${r.gps ? `<span class="gps">GPS ${r.gps}</span>` : ""}</td>
+      <td class="${r.sD == null ? "muted" : ""}">${r.sD == null ? "–" : `${num(dist(r.sD), 2)} ${u.label}`}</td>
+      <td>${fmtMetres(r.m)}${r.gps ? `<span class="gps">GPS ${r.gps}</span>` : ""}</td>
       <td><b>${fmtTime(r.t)}</b></td>
       <td>${fmtPace(r.t / r.m * u.m)}</td>
-      <td class="${r.vs <= -0.5 ? "faster" : r.vs >= 0.5 ? "slower" : "muted"}">${r.vs > 0 ? "+" : r.vs < 0 ? "−" : "±"}${num(Math.abs(r.vs), 1)} s</td>
+      <td class="${r.vs == null ? "muted" : r.vs <= -0.5 ? "faster" : r.vs >= 0.5 ? "slower" : "muted"}">${r.vs == null ? "–" : `${r.vs > 0 ? "+" : r.vs < 0 ? "−" : "±"}${num(Math.abs(r.vs), 1)} s`}</td>
       <td class="${r.recT == null ? "muted" : ""}">${rec(r)}</td>
       <td class="${r.hr ? "" : "muted"}">${r.hr ? r.hr : "–"}</td>
     </tr>`).join("") + "</tbody>";
+  return rs;
 }
+function renderRepTools(runId, saved, repCount, canHint) {
+  $("reps-tools").hidden = !saved && !canHint;
+  $("reps-source").textContent = saved
+    ? (saved.source === "hint" && saved.hint_label ? `Set by you: ${saved.hint_label}` : `Confirmed by you${saved.saved_at ? " " + fmtStamp(saved.saved_at) : ""}`)
+    : repCount ? "" : "No reps detected. Was this a workout?";
+  $("hint-form").hidden = !canHint;
+  $("reps-reset").hidden = !(saved && repStore.owner);
+  if (toolsRunId !== runId) {
+    toolsRunId = runId;
+    $("hint-input").value = saved && saved.source === "hint" && typeof saved.hint === "string" ? saved.hint : "";
+    $("reps-status").textContent = "";
+  }
+}
+function repStatus(msg) { $("reps-status").textContent = msg; }
+function saveError(e) {
+  return e && e.code === "invalid_argument" ? "Only the dashboard's owner can change reps." : `Couldn't save (${(e && e.code) || "error"}). Try again.`;
+}
+let repWriting = false;
+$("hint-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (repWriting || !repStore.db) return;
+  const runId = state.runId, text = $("hint-input").value.trim(), sets = parseHint(text), st = streamOf(runId);
+  if (!sets) return repStatus("Try a format like 4 x 800, 6 x 1k, or a mix in order: 1x100, 1x200, 3x800.");
+  if (!st) return repStatus("This run has no speed data to search.");
+  const reps = findReps(st, sets);
+  if (!reps.length) return repStatus("Couldn't find efforts like that in this run.");
+  const wanted = sets.reduce((a, x) => a + x.n, 0);
+  const prev = runId in savedReps ? savedReps[runId] : null;
+  const body = {activity_id: runId, source: "hint", hint: text, hint_label: hintLabel(sets), saved_at: new Date().toISOString(), reps};
+  repWriting = true;
+  $("hint-apply").disabled = true;
+  savedReps[runId] = body;
+  renderReps(runId);
+  const listed = sets.flatMap(x => Array(x.n).fill(x.m)).join(), found = reps.map(r => r.distance_m).join();
+  const short = reps.length < wanted ? `Found only ${reps.length} of ${wanted}. `
+    : listed !== found ? "Found them in a different order than you listed. " : "";
+  repStatus(short + "Saving…");
+  try {
+    await repStore.db.doc("manual_reps/" + runId).set(body);
+    if (state.runId === runId) repStatus(short + "Saved ✓");
+  } catch (err) {
+    savedReps[runId] = prev;
+    if (state.runId === runId) { renderReps(runId); repStatus(saveError(err)); }
+  }
+  repWriting = false;
+  $("hint-apply").disabled = false;
+});
+$("reps-reset").addEventListener("click", async () => {
+  if (repWriting || !repStore.db) return;
+  const runId = state.runId, prev = savedReps[runId];
+  repWriting = true;
+  savedReps[runId] = null;
+  $("hint-input").value = "";
+  renderReps(runId);
+  repStatus("Saving…");
+  try {
+    await repStore.db.doc("manual_reps/" + runId).delete();
+    if (state.runId === runId) repStatus("Back to detected reps.");
+  } catch (err) {
+    savedReps[runId] = prev;
+    if (state.runId === runId) { renderReps(runId); repStatus(saveError(err)); }
+  }
+  repWriting = false;
+});
 function renderProfile(prof) {
   const c = $("profile-chart"), u = U();
   $("hr-key").hidden = !prof.some(p => p[3]);
@@ -791,6 +1038,17 @@ function renderProfile(prof) {
     el("line", {x1: m.l, x2: w - m.r, y1: yy, y2: yy, class: "grid"}, svg);
     text(svg, {x: m.l - 8, y: yy + 3.5, "text-anchor": "end", class: "ax"}, fmtPace(v));
   }
+  // Shade each rep's stretch of the route, numbered to match the reps table.
+  $("rep-key").hidden = !repBands.length;
+  const bandOf = d => repBands.find(r => d >= r.sD && d <= r.sD + (r.gps || r.m));
+  let lastLabel = -Infinity;
+  repBands.forEach(r => {
+    const x0 = x(Math.max(0, r.sD)), x1 = x(Math.min(maxD, r.sD + (r.gps || r.m)));
+    if (x1 <= m.l || x0 >= w - m.r) return;
+    el("rect", {x: x0, y: m.t, width: Math.max(x1 - x0, 2), height: h - m.t - m.b, fill: "var(--accent-wash)"}, svg);
+    const lx = (x0 + x1) / 2;
+    if (lx - lastLabel >= 10) { text(svg, {x: lx, y: m.t - 3, "text-anchor": "middle", class: "ax"}, r.i + 1); lastLabel = lx; }
+  });
   const ap = prof.filter(p => p[2] != null);
   el("path", {d: `M${x(ap[0][0])},${h - m.b} ` + ap.map(p => `L${x(p[0]).toFixed(1)},${yA(p[2]).toFixed(1)}`).join("") + ` L${x(ap[ap.length - 1][0])},${h - m.b}Z`, fill: "var(--surface-2)", stroke: "var(--ink-faint)", "stroke-width": 1}, svg);
   const hp = pts.filter(p => p.hr);
@@ -809,7 +1067,8 @@ function renderProfile(prof) {
     const b = svg.getBoundingClientRect(), px = (e.clientX - b.left) * (w / b.width);
     const p = pts.reduce((a, q) => Math.abs(x(q.d) - px) < Math.abs(x(a.d) - px) ? q : a, pts[0]);
     cross.setAttribute("x1", x(p.d)); cross.setAttribute("x2", x(p.d)); cross.setAttribute("opacity", 1);
-    showTip(tip, c, `<b>${fmtPace(p.pace)}/${u.label}</b> at ${num(p.d / u.m, 2)} ${u.label}<br>` +
+    const band = bandOf(p.d);
+    showTip(tip, c, `<b>${fmtPace(p.pace)}/${u.label}</b> at ${num(p.d / u.m, 2)} ${u.label}${band ? ` · rep ${band.i + 1}` : ""}<br>` +
       (p.alt != null ? `${Math.round(p.alt * u.elevPerM)} ${u.elev}` : "") + (p.hr ? ` · ${Math.round(p.hr)} bpm` : ""), ...toPx(svg, w, h, x(p.d), yP(p.pace)));
   });
   hit.addEventListener("pointerleave", () => { hideTip(tip); cross.setAttribute("opacity", 0); });

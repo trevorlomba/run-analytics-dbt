@@ -148,6 +148,10 @@ models:
               arguments:
                 to: ref('fct_runs')
                 field: activity_id
+      - name: start_elapsed_s
+        description: Seconds into the run when the rep started.
+      - name: start_distance_m
+        description: GPS distance into the run where the rep started.
       - name: rep_time_s
         description: The rep's split, in seconds.
       - name: rep_distance_m

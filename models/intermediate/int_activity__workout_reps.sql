@@ -232,6 +232,7 @@ select
     activity_id,
     row_number() over w                                             as rep_number,
     round(start_s, 1)                                               as start_elapsed_s,
+    round(start_distance_m, 1)                                      as start_distance_m,
     round(rep_time_s, 1)                                            as rep_time_s,
     round(gps_distance_m, 1)                                        as gps_distance_m,
     nominal_distance_m,
