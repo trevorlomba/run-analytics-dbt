@@ -98,7 +98,8 @@ def main(out, sample, standalone):
             from fct_run_splits order by activity_id, split_unit, split_number""", by_unit=True),
         "reps": grouped(con, """
             select cast(activity_id as varchar), rep_distance_m, rep_time_s, rep_time_vs_avg_s,
-                   round(avg_hr), recovery_time_s, recovery_distance_m, is_fastest_rep
+                   round(avg_hr), recovery_time_s, recovery_distance_m, is_fastest_rep,
+                   case when nominal_distance_m is not null then round(gps_distance_m) end
             from fct_workout_reps order by activity_id, rep_number"""),
         "profile": grouped(con, """
             select cast(activity_id as varchar), round(distance_m), round(pace_s_per_km, 1),
