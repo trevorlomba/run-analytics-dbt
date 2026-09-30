@@ -886,8 +886,6 @@ function fromSaved(body) {
 
 // Rep times as m:ss, rounding before splitting so 2:59.6 reads 3:00, not 2:60.
 const fmtTime = s => { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
-// Time into the run: m:ss, or h:mm:ss past an hour.
-const fmtClock = s => { s = Math.round(s); return s < 3600 ? fmtTime(s) : `${Math.floor(s / 3600)}:${fmtTime(s % 3600).padStart(5, "0")}`; };
 let toolsRunId = null, repBands = [];
 function renderReps(runId) {
   const rs = drawReps(runId);
@@ -932,18 +930,18 @@ function drawReps(runId) {
     hit.addEventListener("pointerenter", () => showTip(tip, c,
       `<b>Rep ${r.i + 1} · ${fmtTime(r.t)}</b> for ${fmtMetres(r.m)}${r.gps ? ` (GPS ${r.gps} m)` : ""}${r.best ? " · fastest" : ""}` +
       `<br>${fmtPace(r.t / r.m * u.m)}/${u.label}${r.hr ? ` · ${r.hr} bpm` : ""}` +
-      (r.sT != null ? `<br>Started ${fmtClock(r.sT)} in${r.sD != null ? ` · ${num(dist(r.sD), 2)} ${u.label}` : ""}` : ""),
+      (r.sD != null ? `<br>Started at ${num(dist(r.sD), 2)} ${u.label}` : ""),
       ...toPx(svg, w, h, cx, top)));
     hit.addEventListener("pointerleave", () => hideTip(tip));
   });
   if (same) el("line", {x1: m.l, x2: w - m.r, y1: y(avg), y2: y(avg), stroke: "var(--ink-muted)", "stroke-width": 1.5, "stroke-dasharray": "5 4"}, svg);
   $("reps-avg-key").hidden = !same;
 
-  const rec = r => r.recT == null ? "–" : `${fmtTime(r.recT)}${r.recM != null && r.recM < 50 ? " standing" : r.recM != null ? ` · ${Math.round(r.recM)} m` : ""}`;
-  $("reps-table").innerHTML = `<thead><tr><th>Rep</th><th>Start</th><th>Distance</th><th>Time</th><th>Pace /${u.label}</th><th>vs avg</th><th>Recovery</th><th>Avg HR</th></tr></thead><tbody>` +
+  const rec = r => r.recT == null ? "–" : fmtTime(r.recT);
+  $("reps-table").innerHTML = `<thead><tr><th>Rep</th><th>Start</th><th>Distance</th><th>Time</th><th>Pace /${u.label}</th><th>vs avg</th><th>Rest</th><th>Avg HR</th></tr></thead><tbody>` +
     rs.map(r => `<tr>
       <td>${r.i + 1}${r.best ? '<span class="tag good">fastest</span>' : ""}</td>
-      <td class="${r.sT == null ? "muted" : ""}">${r.sT == null ? "–" : fmtClock(r.sT)}${r.sD != null ? `<span class="gps">${num(dist(r.sD), 2)} ${u.label}</span>` : ""}</td>
+      <td class="${r.sD == null ? "muted" : ""}">${r.sD == null ? "–" : `${num(dist(r.sD), 2)} ${u.label}`}</td>
       <td>${fmtMetres(r.m)}${r.gps ? `<span class="gps">GPS ${r.gps}</span>` : ""}</td>
       <td><b>${fmtTime(r.t)}</b></td>
       <td>${fmtPace(r.t / r.m * u.m)}</td>
