@@ -125,6 +125,9 @@
   .key-hr{width:14px;height:0;border-top:2px solid var(--hr)}
   .reps{display:flex;flex-direction:column;gap:10px}
   .gps{display:block;font-size:11px;color:var(--ink-faint);margin-top:1px}
+  .reps-save{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .reps-save .caption{margin:0}
+  .pill:disabled{opacity:.55;cursor:default}
   .caption{font-size:11.5px;color:var(--ink-faint);margin:-2px 0 4px;line-height:1.45}
   td.faster{color:var(--good)}
   td.slower{color:var(--warn)}
@@ -204,6 +207,7 @@
       <div class="chart" id="reps-chart"></div>
       <div class="table-wrap"><table id="reps-table"></table></div>
       <p class="caption">Detected from GPS speed, no lap button needed · times ±1 s · distance rounded to a standard length, GPS reading below it</p>
+      <div class="reps-save" id="reps-save" hidden><button type="button" class="pill" id="reps-confirm">Confirm these reps</button><span class="caption" id="reps-save-status" aria-live="polite"></span></div>
     </div>
     <div class="panel-head">
       <span class="sub-title" id="splits-title">Splits</span>
@@ -686,7 +690,7 @@ function renderRun() {
     x.workout_label ? `<span class="tag" style="margin:0">${esc(x.workout_label)}</span>` : "",
     x.is_negative_split ? `<span class="tag good" style="margin:0">negative split</span>` : "",
   ].join("");
-  renderReps(DATA.reps[x.activity_id] || []);
+  renderReps(DATA.reps[x.activity_id] || [], x.activity_id);
   $("splits-title").textContent = state.units === "mi" ? "Mile splits" : "Kilometer splits";
   renderSplits(splits);
   renderProfile(DATA.profile[x.activity_id] || []);
@@ -720,9 +724,50 @@ function renderSplits(splits) {
     hit.addEventListener("pointerleave", () => hideTip(tip));
   });
 }
+/* ---------- saved reps (the page's db store; views without it just show detection) ---------- */
+// Resolves [db, user], or nulls when this view can't run the store. Never blocks rendering.
+const store$ = (async () => {
+  try { return window.claude && claude.use ? await Promise.all([claude.use("db"), claude.use("user")]) : [null, null]; }
+  catch (e) { return [null, null]; }
+})();
+const fmtStamp = iso => new Date(iso).toLocaleString(undefined, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
+let saveRunId = null, saveSeq = 0;
+async function renderRepSave(runId, rs) {
+  if (runId === saveRunId) return;              // resize and unit changes re-render; only a new run re-reads
+  saveRunId = runId;
+  const seq = ++saveSeq, box = $("reps-save"), btn = $("reps-confirm"), status = $("reps-save-status");
+  box.hidden = true;
+  const [db, user] = await store$;
+  if (seq !== saveSeq || !db) return;
+  const owner = user ? await user.isOwner() : false;
+  const ref = db.doc("manual_reps/" + runId);
+  let saved = null;
+  try { const snap = await ref.get(); saved = snap.exists ? snap.data() : null; }
+  catch (e) { if (seq === saveSeq) { status.textContent = "Saved reps are unavailable right now."; btn.hidden = true; box.hidden = false; } return; }
+  if (seq !== saveSeq) return;
+  status.textContent = saved ? `Confirmed ${fmtStamp(saved.saved_at)}` : "";
+  btn.hidden = !owner;
+  btn.disabled = false;
+  btn.textContent = saved ? "Confirm again" : "Confirm these reps";
+  box.hidden = !owner && !saved;
+  btn.onclick = async () => {
+    btn.disabled = true;
+    status.textContent = "Saving…";
+    const body = {activity_id: runId, source: "confirm", saved_at: new Date().toISOString(),
+      reps: rs.map(r => ({rep: r.i + 1, time_s: r.t, distance_m: r.m, gps_distance_m: r.gps ?? null}))};
+    try {
+      await ref.set(body);
+      if (seq === saveSeq) { status.textContent = `Saved ✓ ${fmtStamp(body.saved_at)}`; btn.textContent = "Confirm again"; }
+    } catch (e) {
+      if (seq === saveSeq) status.textContent = e && e.code === "invalid_argument" ? "Only the dashboard's owner can save reps." : `Couldn't save (${(e && e.code) || "error"}). Try again.`;
+    }
+    btn.disabled = false;
+  };
+}
+
 // Rep times as m:ss, rounding before splitting so 2:59.6 reads 3:00, not 2:60.
 const fmtTime = s => { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
-function renderReps(reps) {
+function renderReps(reps, runId) {
   $("reps-block").hidden = !reps.length;
   if (!reps.length) return;
   const c = $("reps-chart"), u = U();
@@ -769,6 +814,7 @@ function renderReps(reps) {
       <td class="${r.recT == null ? "muted" : ""}">${rec(r)}</td>
       <td class="${r.hr ? "" : "muted"}">${r.hr ? r.hr : "–"}</td>
     </tr>`).join("") + "</tbody>";
+  renderRepSave(runId, rs);
 }
 function renderProfile(prof) {
   const c = $("profile-chart"), u = U();
