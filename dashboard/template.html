@@ -124,6 +124,7 @@
   .key-area{width:14px;height:10px;background:var(--surface-2);border-top:1.5px solid var(--ink-faint)}
   .key-hr{width:14px;height:0;border-top:2px solid var(--hr)}
   .reps{display:flex;flex-direction:column;gap:10px}
+  .caption{font-size:11.5px;color:var(--ink-faint);margin:-2px 0 4px;line-height:1.45}
   td.faster{color:var(--good)}
   td.slower{color:var(--warn)}
 </style>
@@ -200,8 +201,8 @@
         <div class="legend"><span><i class="key-bar"></i>Rep</span><span><i class="key-line dash"></i>Session average</span></div>
       </div>
       <div class="chart" id="reps-chart"></div>
-      <p class="panel-note">Found from the speed stream, no lap button needed. Times are good to about a second; GPS distance is snapped to the nearest standard rep distance.</p>
       <div class="table-wrap"><table id="reps-table"></table></div>
+      <p class="caption">Detected from GPS speed, no lap button needed · times ±1 s · distances rounded to the nearest standard rep</p>
     </div>
     <div class="panel-head">
       <span class="sub-title" id="splits-title">Splits</span>
