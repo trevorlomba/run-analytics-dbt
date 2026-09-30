@@ -130,7 +130,7 @@
   #reps-body[hidden] + .reps-tools{border-top:0;padding-top:0}
   .reps-tools .caption:empty{display:none}
   .hint-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--ink-muted)}
-  .hint-form input{font:inherit;font-size:16px;color:var(--ink);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:5px 9px;width:9.5em}
+  .hint-form input{font:inherit;font-size:16px;color:var(--ink);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:5px 9px;width:14em;max-width:100%}
   .hint-form input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   .pill:disabled{opacity:.55;cursor:default}
   .caption{font-size:11.5px;color:var(--ink-faint);margin:-2px 0 4px;line-height:1.45}
@@ -208,7 +208,7 @@
       <div class="reps" id="reps-body">
         <div class="panel-head">
           <span class="sub-title" id="reps-title">Reps</span>
-          <div class="legend"><span><i class="key-bar"></i>Rep</span><span><i class="key-line dash"></i>Session average</span></div>
+          <div class="legend"><span><i class="key-bar"></i>Rep</span><span id="reps-avg-key"><i class="key-line dash"></i>Session average</span></div>
         </div>
         <div class="chart" id="reps-chart"></div>
         <div class="table-wrap"><table id="reps-table"></table></div>
@@ -218,7 +218,7 @@
         <p class="caption" id="reps-source"></p>
         <form class="hint-form" id="hint-form" hidden>
           <label for="hint-input">Tell it the workout</label>
-          <input id="hint-input" placeholder="e.g. 4 x 800" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" maxlength="20">
+          <input id="hint-input" placeholder="e.g. 4 x 800 or 1x200, 3x800" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" maxlength="20">
           <button type="submit" class="pill" id="hint-apply">Apply</button>
           <button type="button" class="pill" id="reps-reset" hidden>Reset to detected</button>
         </form>
@@ -775,19 +775,27 @@ function streamOf(runId) {
   return (DATA.streams[runId] = {t, d, v: s[2].map(x => x / 100)});
 }
 
-// "4 x 800", "6x1k", "3 × 1 mi", "5x1000m" -> {n, m}
+// "4 x 800", "6x1k", "3 × 1 mi", or a mix in order: "1x100, 1x200, 3x800" -> [{n, m}, ...]
 function parseHint(text) {
-  const x = String(text).toLowerCase().replace(/\s+/g, "").match(/^(\d{1,2})[x×*](\d+(?:\.\d+)?)(m|k|km|mi|mile|miles)?$/);
-  if (!x) return null;
-  const n = +x[1], d = +x[2], unit = x[3] || (d < 20 ? "k" : "m");
-  const m = Math.round(unit === "m" ? d : unit.startsWith("mi") ? d * 1609.344 : d * 1000);
-  return n >= 1 && n <= 30 && m >= 100 && m <= 10000 ? {n, m} : null;
+  const parts = String(text).toLowerCase().split(/,|\+|&|\band\b/).map(p => p.replace(/\s+/g, "")).filter(Boolean);
+  if (!parts.length || parts.length > 10) return null;
+  const sets = [];
+  for (const p of parts) {
+    const x = p.match(/^(?:(\d{1,2})[x×*])?(\d+(?:\.\d+)?)(m|k|km|mi|mile|miles)?$/);
+    if (!x) return null;
+    const n = x[1] ? +x[1] : 1, d = +x[2], unit = x[3] || (d < 20 ? "k" : "m");
+    const m = Math.round(unit === "m" ? d : unit.startsWith("mi") ? d * 1609.344 : d * 1000);
+    if (n < 1 || m < 100 || m > 10000) return null;
+    sets.push({n, m});
+  }
+  return sets.reduce((a, x) => a + x.n, 0) <= 30 ? sets : null;
 }
+const hintLabel = sets => sets.map(x => `${x.n} × ${fmtMetres(x.m)}`).join(" + ");
 
 // Find the n fastest, non-overlapping stretches covering about m metres, then move each edge
 // to where raw speed crosses halfway between the rep's pace and the pace beside it and stays
 // clearly below rep pace for ~6 s (so GPS wobble isn't an edge), interpolating between samples.
-function findReps(st, n, m) {
+function findReps(st, sets) {
   const {t, d, v} = st, len = t.length;
   const back = new Array(len), fwd = new Array(len);      // mean speed over the 6 s before / after each sample
   for (let i = 0, lo = 0, sum = 0; i < len; i++) {
@@ -800,18 +808,23 @@ function findReps(st, n, m) {
     while (t[hi] > t[i] + 6) sum -= v[hi--];
     fwd[i] = sum / (hi - i + 1);
   }
-  const wins = [];
-  for (let i = 0, j = 0; i < len; i++) {
-    if (j < i) j = i;
-    while (j < len && d[j] - d[i] < m) j++;
-    if (j >= len) break;
-    wins.push({i, j, speed: (d[j] - d[i]) / Math.max(t[j] - t[i], 1)});
-  }
-  wins.sort((a, b) => b.speed - a.speed);
+  // Longest sets first: the fastest 100 m of a session is usually inside an 800, so short
+  // reps are only placed in the gaps the long ones leave.
   const picked = [];
-  for (const w of wins) {
-    if (picked.length === n) break;
-    if (!picked.some(p => t[w.i] < t[p.j] + 10 && t[w.j] > t[p.i] - 10)) picked.push(w);
+  for (const {n, m} of sets.slice().sort((a, b) => b.m - a.m)) {
+    const wins = [];
+    for (let i = 0, j = 0; i < len; i++) {
+      if (j < i) j = i;
+      while (j < len && d[j] - d[i] < m) j++;
+      if (j >= len) break;
+      wins.push({i, j, m, speed: (d[j] - d[i]) / Math.max(t[j] - t[i], 1)});
+    }
+    wins.sort((a, b) => b.speed - a.speed);
+    let got = 0;
+    for (const w of wins) {
+      if (got === n) break;
+      if (!picked.some(p => t[w.i] < t[p.j] + 10 && t[w.j] > t[p.i] - 10)) { picked.push(w); got++; }
+    }
   }
   picked.sort((a, b) => a.i - b.i);
   const mean = (a, b) => { let s = 0, c = 0; for (let k = 0; k < len; k++) if (t[k] >= a && t[k] <= b) { s += v[k]; c++; } return c ? s / c : null; };
@@ -840,10 +853,10 @@ function findReps(st, n, m) {
     while (b < ceil - 1 && !(v[b + 1] < dn && fwd[b + 1] < dnStay)) b++;
     while (b > a && v[b] < dn) b--;
     const end = b < len - 1 && v[b + 1] < dn ? t[b] + (v[b] - dn) / (v[b] - v[b + 1]) * (t[b + 1] - t[b]) : t[b];
-    if (end - start >= 10) out.push({start, end, gps: distAt(end) - distAt(start)});
+    if (end - start >= 10) out.push({start, end, m: w.m, gps: distAt(end) - distAt(start)});
   });
   return out.map((r, k) => ({
-    rep: k + 1, start_s: +r.start.toFixed(1), time_s: +(r.end - r.start).toFixed(1), distance_m: m,
+    rep: k + 1, start_s: +r.start.toFixed(1), time_s: +(r.end - r.start).toFixed(1), distance_m: r.m,
     gps_distance_m: Math.round(r.gps),
     rec_time_s: k ? +(r.start - out[k - 1].end).toFixed(1) : null,
     rec_distance_m: k ? Math.round(distAt(r.start) - distAt(out[k - 1].end)) : null,
@@ -863,7 +876,11 @@ function fromSaved(body) {
     .map((r, i) => ({...r, i}));
   const byDist = {};
   rs.forEach(r => (byDist[r.m] = byDist[r.m] || []).push(r.t));
-  rs.forEach(r => { const a = byDist[r.m]; r.vs = r.t - a.reduce((x, y) => x + y, 0) / a.length; r.best = r.t === Math.min(...a); });
+  rs.forEach(r => {
+    const a = byDist[r.m];
+    r.vs = a.length > 1 ? r.t - a.reduce((x, y) => x + y, 0) / a.length : null;   // a single rep has nothing to compare with
+    r.best = a.length > 1 && r.t === Math.min(...a);
+  });
   return rs;
 }
 
@@ -887,6 +904,7 @@ function renderReps(runId) {
   const same = rs.every(r => r.m === rs[0].m);
   const val = r => same ? r.t : r.t / r.m * u.m, fmtVal = same ? fmtTime : fmtPace;
   $("reps-title").textContent = same ? `Reps · ${rs.length} × ${fmtMetres(rs[0].m)}` : `Reps · pace /${u.label}`;
+  $("reps-title").title = saved && saved.hint_label ? saved.hint_label : "";
   const avg = rs.reduce((a, r) => a + val(r), 0) / rs.length;
   const {svg, tip, w, h} = frame(c, 190);
   const m = {t: 22, r: 8, b: 26, l: 48};
@@ -910,7 +928,8 @@ function renderReps(runId) {
       ...toPx(svg, w, h, cx, top)));
     hit.addEventListener("pointerleave", () => hideTip(tip));
   });
-  el("line", {x1: m.l, x2: w - m.r, y1: y(avg), y2: y(avg), stroke: "var(--ink-muted)", "stroke-width": 1.5, "stroke-dasharray": "5 4"}, svg);
+  if (same) el("line", {x1: m.l, x2: w - m.r, y1: y(avg), y2: y(avg), stroke: "var(--ink-muted)", "stroke-width": 1.5, "stroke-dasharray": "5 4"}, svg);
+  $("reps-avg-key").hidden = !same;
 
   const rec = r => r.recT == null ? "–" : `${fmtTime(r.recT)}${r.recM != null && r.recM < 50 ? " standing" : r.recM != null ? ` · ${Math.round(r.recM)} m` : ""}`;
   $("reps-table").innerHTML = `<thead><tr><th>Rep</th><th>Distance</th><th>Time</th><th>Pace /${u.label}</th><th>vs avg</th><th>Recovery</th><th>Avg HR</th></tr></thead><tbody>` +
@@ -919,7 +938,7 @@ function renderReps(runId) {
       <td>${fmtMetres(r.m)}${r.gps ? `<span class="gps">GPS ${r.gps}</span>` : ""}</td>
       <td><b>${fmtTime(r.t)}</b></td>
       <td>${fmtPace(r.t / r.m * u.m)}</td>
-      <td class="${r.vs <= -0.5 ? "faster" : r.vs >= 0.5 ? "slower" : "muted"}">${r.vs > 0 ? "+" : r.vs < 0 ? "−" : "±"}${num(Math.abs(r.vs), 1)} s</td>
+      <td class="${r.vs == null ? "muted" : r.vs <= -0.5 ? "faster" : r.vs >= 0.5 ? "slower" : "muted"}">${r.vs == null ? "–" : `${r.vs > 0 ? "+" : r.vs < 0 ? "−" : "±"}${num(Math.abs(r.vs), 1)} s`}</td>
       <td class="${r.recT == null ? "muted" : ""}">${rec(r)}</td>
       <td class="${r.hr ? "" : "muted"}">${r.hr ? r.hr : "–"}</td>
     </tr>`).join("") + "</tbody>";
@@ -945,18 +964,21 @@ let repWriting = false;
 $("hint-form").addEventListener("submit", async e => {
   e.preventDefault();
   if (repWriting || !repStore.db) return;
-  const runId = state.runId, text = $("hint-input").value.trim(), h = parseHint(text), st = streamOf(runId);
-  if (!h) return repStatus("Try a format like 4 x 800, 6 x 1k or 3 x 1 mi.");
+  const runId = state.runId, text = $("hint-input").value.trim(), sets = parseHint(text), st = streamOf(runId);
+  if (!sets) return repStatus("Try a format like 4 x 800, 6 x 1k, or a mix in order: 1x100, 1x200, 3x800.");
   if (!st) return repStatus("This run has no speed data to search.");
-  const reps = findReps(st, h.n, h.m);
-  if (!reps.length) return repStatus(`Couldn't find any ${fmtMetres(h.m)} efforts in this run.`);
+  const reps = findReps(st, sets);
+  if (!reps.length) return repStatus("Couldn't find efforts like that in this run.");
+  const wanted = sets.reduce((a, x) => a + x.n, 0);
   const prev = runId in savedReps ? savedReps[runId] : null;
-  const body = {activity_id: runId, source: "hint", hint: text, hint_label: `${h.n} × ${fmtMetres(h.m)}`, saved_at: new Date().toISOString(), reps};
+  const body = {activity_id: runId, source: "hint", hint: text, hint_label: hintLabel(sets), saved_at: new Date().toISOString(), reps};
   repWriting = true;
   $("hint-apply").disabled = true;
   savedReps[runId] = body;
   renderReps(runId);
-  const short = reps.length < h.n ? `Found only ${reps.length} of ${h.n}. ` : "";
+  const listed = sets.flatMap(x => Array(x.n).fill(x.m)).join(), found = reps.map(r => r.distance_m).join();
+  const short = reps.length < wanted ? `Found only ${reps.length} of ${wanted}. `
+    : listed !== found ? "Found them in a different order than you listed. " : "";
   repStatus(short + "Saving…");
   try {
     await repStore.db.doc("manual_reps/" + runId).set(body);
