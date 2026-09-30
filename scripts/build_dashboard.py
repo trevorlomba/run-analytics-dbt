@@ -39,6 +39,27 @@ def grouped(con, sql, by_unit=False):
     return out
 
 
+def streams(con, days=45):
+    """{activity_id: [dt_s[], d_dm[], v_cms[]]} for valid GPS runs in the last `days` days."""
+    out, last = {}, {}
+    for a, t, d, v in con.execute(f"""
+            select cast(s.activity_id as varchar), s.elapsed_s,
+                   cast(round(s.distance_m * 10) as integer), cast(round(s.speed_m_s * 100) as integer)
+            from stg_strava__streams as s
+            inner join fct_runs as r using (activity_id)
+            where r.is_valid_run and not r.is_manual_entry
+              and r.run_date >= (select max(run_date) from fct_runs) - interval {int(days)} day
+              and s.distance_m is not null and s.speed_m_s is not null
+            order by 1, 2""").fetchall():
+        dt_, dd, vv = out.setdefault(a, [[], [], []])
+        prev_t, prev_d = last.get(a, (0, 0))
+        dt_.append(t - prev_t)
+        dd.append(d - prev_d)
+        vv.append(v)
+        last[a] = (t, d)
+    return out
+
+
 def jsonable(v):
     if isinstance(v, (dt.date, dt.datetime)):
         return v.isoformat()[:10]
@@ -101,6 +122,9 @@ def main(out, sample, standalone):
                    round(avg_hr), recovery_time_s, recovery_distance_m, is_fastest_rep,
                    case when nominal_distance_m is not null then round(gps_distance_m) end
             from fct_workout_reps order by activity_id, rep_number"""),
+        # Raw speed streams for recent runs, so the page can re-find reps from a hint
+        # ("4 x 800"). Delta-encoded ints keep ~45 days to a few hundred KB.
+        "streams": streams(con),
         "profile": grouped(con, """
             select cast(activity_id as varchar), round(distance_m), round(pace_s_per_km, 1),
                    round(altitude_m, 1), round(avg_hr)
