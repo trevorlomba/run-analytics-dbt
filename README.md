@@ -28,11 +28,13 @@ flowchart LR
   G --> ng[stg_nutrition__goals<br/><i>type-2 history</i>]
   sk --> isp[int_activity__split_metrics]
   ss --> ism[int_activity__stream_metrics]
+  ss --> iwr[int_activity__workout_reps<br/><i>reps from speed alone</i>]
   nd --> ing[int_nutrition__daily_with_goals<br/><i>point-in-time join</i>]
   ng --> ing
   sa --> fr[fct_runs]
   isp --> fr
   ism --> fr
+  iwr --> fr
   sa --> dd[dim_date]
   nd --> dd
   ing --> fn[fct_daily_nutrition]
@@ -46,6 +48,8 @@ flowchart LR
   fr --> rs
   ss --> rp[fct_run_route_profile]
   fr --> rp
+  iwr --> wr[fct_workout_reps]
+  fr --> wr
 ```
 
 | Layer | Materialization | Purpose |
@@ -68,13 +72,17 @@ flowchart LR
   Strava's grade-adjusted pace parsed out of the sheet's `min.ss` text and partial final splits flagged.
 - **`fct_run_route_profile`** (one row per 100 m of each run): pace, elevation and HR along the
   route, compressed from ~1 Hz streams (about 50k rows) to roughly 1.5k rows a chart can draw directly.
+- **`fct_workout_reps`** (one row per rep of each interval session): rep time, pace, gap to the
+  session average, and the recovery before it, **found from the speed stream alone**, so track
+  workouts get splits without pressing the lap button. `fct_runs` gets `is_interval_workout`
+  and a label like `8 x 800 m`.
 - **`dim_date`**: calendar with a `has_strava_coverage` flag (first to last synced run), so "no data" is never confused with "no runs". A stalled sync can't masquerade as a week of rest.
 
 ## Dashboard
 
 `scripts/build_dashboard.py` renders a single-page dashboard from the marts:
 weekly volume, pace by run, training load, calories against the goal band, a runs table,
-and a run explorer (splits with grade-adjusted pace, plus the route profile). Every panel
+and a run explorer (splits with grade-adjusted pace, detected reps for interval sessions, plus the route profile). Every panel
 follows one date-range control (7/14/30/60 days, all, or custom dates), with a mi/km switch
 and a Sunday/Monday week start. The page ships daily and per-run rows and does the weekly
 roll-up itself, so those controls work without a rebuild.
@@ -101,21 +109,34 @@ python scripts/build_dashboard.py --sample --standalone --out docs/index.html
 - **Pace is recomputed** from time and distance instead of trusting the sheet's text column.
 - **Stream samples are time-weighted.** Strava streams are not strictly 1 Hz, so zone time
   and average HR weight each sample by the gap to the next one.
+- **Reps are detected, not logged.** Smoothed speed finds the efforts (a per-run threshold
+  halfway between easy and fast pace, so it adapts to any fitness level). Each boundary is then
+  placed where raw speed crosses halfway between the rep's pace and the pace beside it,
+  interpolated between samples. A single run-wide threshold clips reps short whenever
+  recoveries are slower than easy pace. Track GPS reads a few percent long, so reps snap to
+  the nearest standard distance within 10%. On the sample data, rep times land within 0.6 s
+  of the generator's ground truth. Steady and progression runs produce no reps: a run needs
+  fast pace 25% above easy pace and at least two efforts. Each rep must also beat the
+  runner's median pace over the last 60 days by 10%, judged on the snapped distance, so
+  walk breaks in an easy run don't turn ordinary running into "reps".
 - **Accidental starts are flagged, not deleted.** `is_valid_run` excludes activities under
   200 m from aggregates but keeps them for auditing.
 
 ## Tests
 
-64 checks run on every `dbt build`:
+66 checks run on every `dbt build`:
 
 - Grain tests (`unique`, `not_null`, and a custom `unique_combination`) on every model.
 - Referential integrity (`relationships`) from splits and streams to activities.
 - Plausibility ranges (custom `value_in_range`): pace between 2:00 and 20:00 per km, HR between 40 and 220 bpm.
 - A custom `no_overlapping_windows` test on the goals history.
+- A unit test (`workout_reps_found_from_speed_alone`) feeds a hand-built stream through rep detection:
+  three 800 m reps must come out at exactly 160 s with 90 s recoveries, and a steady run, a
+  progression run and an easy run with walk breaks must produce none.
 - Singular tests: km splits must sum to the activity distance (within 2%).
 - **Warn-level data quality monitors:**
   - `warn_strava_sync_is_fresh` flags when runs stop arriving while food logging continues.
-    It caught a real importer outage (no runs after 2026-09-14).
+    It caught a real importer outage (no runs imported from 2026-09-14 until the importer was fixed on 2026-09-26).
   - `warn_logged_calories_match_macros` flags days where logged calories differ from
     4/4/9 macro math by more than 15%, which usually means a logging slip.
 

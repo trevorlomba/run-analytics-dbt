@@ -9,6 +9,25 @@ splits as (
 
 streams as (
     select * from {{ ref('int_activity__stream_metrics') }}
+),
+
+workouts as (
+    select
+        activity_id,
+        cast(sum(rep_count) as integer)                         as workout_rep_count,
+        -- e.g. '8 x 800 m', or '4 x 400 m + 2 x 800 m' for mixed sessions.
+        string_agg(set_label, ' + ' order by first_rep)         as workout_label
+    from (
+        select
+            activity_id,
+            rep_distance_m,
+            min(rep_number)                                     as first_rep,
+            count(*)                                            as rep_count,
+            count(*) || ' x ' || cast(rep_distance_m as integer) || ' m' as set_label
+        from {{ ref('int_activity__workout_reps') }}
+        group by activity_id, rep_distance_m
+    )
+    group by activity_id
 )
 
 select
@@ -32,9 +51,13 @@ select
     sp.fastest_km_pace_s,
     sp.km_pace_stddev_s,
     sp.is_negative_split,
+    w.workout_rep_count is not null                             as is_interval_workout,
+    w.workout_rep_count,
+    w.workout_label,
     -- Accidental starts (a few meters) are kept for completeness but
     -- excluded from volume and pace aggregates downstream.
     a.distance_m >= 200                                         as is_valid_run
 from activities as a
 left join splits as sp using (activity_id)
 left join streams as s using (activity_id)
+left join workouts as w using (activity_id)

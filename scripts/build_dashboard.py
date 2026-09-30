@@ -88,13 +88,18 @@ def main(out, sample, standalone):
         "runs": rows(con, """
             select cast(activity_id as varchar) as activity_id, run_date, activity_name,
                    distance_km * 1000 as distance_m, moving_time_s, elapsed_time_s, elev_gain_m,
-                   avg_hr, max_hr, aerobic_decoupling_pct, is_negative_split, is_valid_run, is_manual_entry
+                   avg_hr, max_hr, aerobic_decoupling_pct, is_negative_split, is_valid_run, is_manual_entry,
+                   workout_label
             from fct_runs order by run_date, activity_id"""),
         # Compact arrays keep the embedded payload small (thousands of rows).
         "splits": grouped(con, """
             select cast(activity_id as varchar), split_unit, distance_m, elapsed_time_s,
                    grade_adj_pace_s_per_unit, avg_hr, elev_gain_m, elev_loss_m, is_partial_split
             from fct_run_splits order by activity_id, split_unit, split_number""", by_unit=True),
+        "reps": grouped(con, """
+            select cast(activity_id as varchar), rep_distance_m, rep_time_s, rep_time_vs_avg_s,
+                   round(avg_hr), recovery_time_s, recovery_distance_m, is_fastest_rep
+            from fct_workout_reps order by activity_id, rep_number"""),
         "profile": grouped(con, """
             select cast(activity_id as varchar), round(distance_m), round(pace_s_per_km, 1),
                    round(altitude_m, 1), round(avg_hr)
