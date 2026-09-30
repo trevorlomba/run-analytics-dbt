@@ -52,16 +52,24 @@ unit_tests:
   - name: workout_reps_found_from_speed_alone
     description: >
       Three 800 m reps (160 s at 5 m/s) with 90 s jog recoveries are found and
-      snapped to 800 m. A steady run with normal pace wobble, and a progression
-      run with one long fast finish, are not treated as interval sessions.
+      snapped to 800 m. A steady run with normal pace wobble, a progression run
+      with one long fast finish, and an easy run with walk breaks are not
+      treated as interval sessions.
     model: int_activity__workout_reps
     given:
+      # Usual pace across these runs is 3 m/s, so reps must beat 3.3 m/s.
+      - input: ref('stg_strava__activities')
+        rows:
+          - {activity_id: 1, run_date: 2026-09-01, distance_m: 4500, moving_time_s: 1500, is_manual_entry: false}
+          - {activity_id: 2, run_date: 2026-09-01, distance_m: 4500, moving_time_s: 1500, is_manual_entry: false}
+          - {activity_id: 3, run_date: 2026-09-01, distance_m: 4500, moving_time_s: 1500, is_manual_entry: false}
+          - {activity_id: 4, run_date: 2026-09-01, distance_m: 4500, moving_time_s: 1500, is_manual_entry: false}
       - input: ref('stg_strava__streams')
         format: sql
         rows: |
           with ticks as (
               select a.activity_id, t.t as elapsed_s
-              from (values (1), (2), (3)) as a(activity_id)
+              from (values (1), (2), (3), (4)) as a(activity_id)
               cross join generate_series(0, 1498, 2) as t(t)
           ),
           speeds as (
@@ -78,7 +86,9 @@ unit_tests:
                       -- 2: steady, with the wobble of a normal easy run.
                       when activity_id = 2 then 3.0 + 0.25 * sin(elapsed_s / 90)
                       -- 3: easy, then one long fast finish.
-                      else case when elapsed_s < 1000 then 3.0 else 4.5 end
+                      when activity_id = 3 then case when elapsed_s < 1000 then 3.0 else 4.5 end
+                      -- 4: easy running at usual pace, with a 60 s walk every 3 minutes.
+                      else case when elapsed_s % 180 < 120 then 3.0 else 1.2 end
                   end as speed_m_s
               from ticks
           )

@@ -116,7 +116,9 @@ python scripts/build_dashboard.py --sample --standalone --out docs/index.html
   recoveries are slower than easy pace. Track GPS reads a few percent long, so reps snap to
   the nearest standard distance within 10%. On the sample data, rep times land within 0.6 s
   of the generator's ground truth. Steady and progression runs produce no reps: a run needs
-  fast pace 25% above easy pace and at least two efforts.
+  fast pace 25% above easy pace and at least two efforts. Each rep must also beat the
+  runner's median pace over the last 60 days by 10%, judged on the snapped distance, so
+  walk breaks in an easy run don't turn ordinary running into "reps".
 - **Accidental starts are flagged, not deleted.** `is_valid_run` excludes activities under
   200 m from aggregates but keeps them for auditing.
 
@@ -129,12 +131,12 @@ python scripts/build_dashboard.py --sample --standalone --out docs/index.html
 - Plausibility ranges (custom `value_in_range`): pace between 2:00 and 20:00 per km, HR between 40 and 220 bpm.
 - A custom `no_overlapping_windows` test on the goals history.
 - A unit test (`workout_reps_found_from_speed_alone`) feeds a hand-built stream through rep detection:
-  three 800 m reps must come out at exactly 160 s with 90 s recoveries, and a steady run and a
-  progression run must produce none.
+  three 800 m reps must come out at exactly 160 s with 90 s recoveries, and a steady run, a
+  progression run and an easy run with walk breaks must produce none.
 - Singular tests: km splits must sum to the activity distance (within 2%).
 - **Warn-level data quality monitors:**
   - `warn_strava_sync_is_fresh` flags when runs stop arriving while food logging continues.
-    It caught a real importer outage (no runs after 2026-09-14).
+    It caught a real importer outage (no runs imported from 2026-09-14 until the importer was fixed on 2026-09-26).
   - `warn_logged_calories_match_macros` flags days where logged calories differ from
     4/4/9 macro math by more than 15%, which usually means a logging slip.
 

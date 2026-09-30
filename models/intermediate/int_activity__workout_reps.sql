@@ -9,14 +9,19 @@
 --    rep's own pace and the pace just outside it, interpolated between samples.
 --    A run-wide threshold on smoothed speed would clip reps short whenever
 --    recoveries are slower than easy pace.
+-- 5. A rep must also be clearly faster than the runner's usual pace (median
+--    of the last 60 days of runs). Otherwise walk breaks in an easy run make
+--    ordinary running look like reps.
 -- A run counts as a workout only when its fast pace is well clear of its easy
--- pace and it has at least two efforts. Steady and progression runs have none.
+-- pace and it has at least two reps. Steady and progression runs have none.
 {% set smooth_half_window_s = 6 %}
 {% set moving_speed_m_s = 1.0 %}
 {% set min_fast_to_easy_ratio = 1.25 %}
 {% set merge_gap_s = 8 %}
 {% set min_rep_s = 30 %}
 {% set min_rep_m = 100 %}
+{% set min_rep_vs_usual_ratio = 1.10 %}
+{% set usual_pace_window_days = 60 %}
 {% set edge_search_s = 16 %}
 
 with samples as (
@@ -33,6 +38,20 @@ with samples as (
     from {{ ref('stg_strava__streams') }}
     where speed_m_s is not null
       and distance_m is not null
+),
+
+-- Median average speed of the runner's runs over the trailing window, as of each run.
+usual_speed as (
+    select
+        a.activity_id,
+        median(b.distance_m / b.moving_time_s)                      as usual_speed
+    from {{ ref('stg_strava__activities') }} as a
+    inner join {{ ref('stg_strava__activities') }} as b
+        on b.run_date between a.run_date - interval {{ usual_pace_window_days }} day and a.run_date
+        and b.distance_m >= 1600
+        and b.moving_time_s > 0
+        and not b.is_manual_entry
+    group by a.activity_id
 ),
 
 thresholds as (
@@ -180,7 +199,6 @@ reps as (
     from bounded
     where end_s - start_s >= {{ min_rep_s }}
       and end_distance_m - start_distance_m >= {{ min_rep_m }}
-    qualify count(*) over (partition by activity_id) >= 2
 ),
 
 -- Track GPS usually reads a few percent long. Snap each rep to the nearest
@@ -197,6 +215,17 @@ snapped as (
     from reps as r
     cross join standard_distances as d
     group by all
+),
+
+-- Judge speed on the snapped distance, since track GPS reads long and would
+-- flatter short efforts. Count reps only after this filter.
+kept as (
+    select s.*
+    from snapped as s
+    left join usual_speed as u using (activity_id)
+    where coalesce(s.nominal_distance_m, s.gps_distance_m) / s.rep_time_s
+          >= {{ min_rep_vs_usual_ratio }} * coalesce(u.usual_speed, 0)
+    qualify count(*) over (partition by s.activity_id) >= 2
 )
 
 select
@@ -214,5 +243,5 @@ select
     -- Recovery since the previous rep ended. Null for the first rep.
     round(start_s - lag(end_s) over w, 1)                           as recovery_time_s,
     round(start_distance_m - lag(end_distance_m) over w, 1)         as recovery_distance_m
-from snapped
+from kept
 window w as (partition by activity_id order by start_s)
