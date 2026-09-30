@@ -17,6 +17,31 @@ models:
       - name: activity_id
         data_tests: [unique, not_null]
 
+  - name: int_activity__workout_reps
+    description: >
+      One row per hard rep of an interval session, detected from the speed stream
+      (no lap presses needed). Runs without clear, repeated efforts have no rows.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [activity_id, rep_number]
+    columns:
+      - name: activity_id
+        data_tests: [not_null]
+      - name: rep_time_s
+        description: Time between the moments smoothed speed crosses the run's rep threshold, going up and coming down.
+        data_tests:
+          - value_in_range:
+              arguments: {min_value: 30, max_value: 3600}
+      - name: gps_distance_m
+        description: Distance the GPS recorded for the rep. On a track this usually reads a few percent long.
+      - name: nominal_distance_m
+        description: The standard distance (200 m to 5 km) within 10% of the GPS distance, or null when none is.
+      - name: rep_distance_m
+        description: The nominal distance when there is one, else the GPS distance rounded to the meter.
+      - name: recovery_time_s
+        description: Time since the previous rep ended. Null for the first rep.
+
   - name: int_nutrition__daily_with_goals
     description: Each logged day joined point-in-time to the macro targets in force that day.
     columns:
@@ -24,6 +49,55 @@ models:
         data_tests: [unique, not_null]
 
 unit_tests:
+  - name: workout_reps_found_from_speed_alone
+    description: >
+      Three 800 m reps (160 s at 5 m/s) with 90 s jog recoveries are found and
+      snapped to 800 m. A steady run with normal pace wobble, and a progression
+      run with one long fast finish, are not treated as interval sessions.
+    model: int_activity__workout_reps
+    given:
+      - input: ref('stg_strava__streams')
+        format: sql
+        rows: |
+          with ticks as (
+              select a.activity_id, t.t as elapsed_s
+              from (values (1), (2), (3)) as a(activity_id)
+              cross join generate_series(0, 1498, 2) as t(t)
+          ),
+          speeds as (
+              select
+                  activity_id,
+                  elapsed_s,
+                  case
+                      -- 1: 300 s easy, then 3 x (160 s at 5 m/s, 90 s jog), then easy.
+                      when activity_id = 1 then case
+                          when elapsed_s >= 300 and elapsed_s < 1050
+                           and (elapsed_s - 300) % 250 < 160 then 5.0
+                          when elapsed_s >= 300 and elapsed_s < 1050 then 2.0
+                          else 3.0 end
+                      -- 2: steady, with the wobble of a normal easy run.
+                      when activity_id = 2 then 3.0 + 0.25 * sin(elapsed_s / 90)
+                      -- 3: easy, then one long fast finish.
+                      else case when elapsed_s < 1000 then 3.0 else 4.5 end
+                  end as speed_m_s
+              from ticks
+          )
+          select
+              activity_id,
+              elapsed_s,
+              coalesce(sum(speed_m_s * 2) over (
+                  partition by activity_id order by elapsed_s
+                  rows between unbounded preceding and 1 preceding), 0) as distance_m,
+              null::double as heart_rate_bpm,
+              null::double as altitude_m,
+              speed_m_s
+          from speeds
+    expect:
+      rows:
+        - {activity_id: 1, rep_number: 1, nominal_distance_m: 800, rep_time_s: 160.0, recovery_time_s: null}
+        - {activity_id: 1, rep_number: 2, nominal_distance_m: 800, rep_time_s: 160.0, recovery_time_s: 90.0}
+        - {activity_id: 1, rep_number: 3, nominal_distance_m: 800, rep_time_s: 160.0, recovery_time_s: 90.0}
+
   - name: goals_join_is_point_in_time
     description: >
       A day must pick up the targets valid on that date, not the latest ones.

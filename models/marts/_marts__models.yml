@@ -33,6 +33,12 @@ models:
         description: False for accidental starts under 200 m, which are excluded from aggregates.
       - name: is_manual_entry
         description: True for runs typed into Strava by hand. They count toward volume and pace but have no splits, streams or HR.
+      - name: is_interval_workout
+        description: True when rep detection found at least two distinct hard efforts in the speed stream.
+      - name: workout_rep_count
+        description: Number of detected reps. Null for runs that are not interval sessions.
+      - name: workout_label
+        description: Session shape from the detected reps, e.g. '8 x 800 m', or '4 x 400 m + 2 x 800 m' for mixed sessions.
 
   - name: fct_daily_nutrition
     description: One row per logged day. Intake vs. the targets in force that day, plus adherence flags.
@@ -124,3 +130,38 @@ models:
         data_tests:
           - value_in_range:
               arguments: {min_value: 0, max_value: 86400}
+
+  - name: fct_workout_reps
+    description: >
+      One row per rep of each interval session on a valid run, detected from the
+      speed stream (no lap presses needed). Rep times are accurate to a couple of
+      seconds; GPS distance on a track is snapped to the nearest standard distance.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [activity_id, rep_number]
+    columns:
+      - name: activity_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_runs')
+                field: activity_id
+      - name: rep_time_s
+        description: The rep's split, in seconds.
+      - name: rep_distance_m
+        description: Standard distance the rep was snapped to (e.g. 800), or the GPS distance when none is within 10%.
+      - name: pace_s_per_km
+        description: Rep time over rep distance, in seconds per km.
+        data_tests:
+          - value_in_range:
+              arguments: {min_value: 120, max_value: 600}
+      - name: rep_time_vs_avg_s
+        description: Seconds slower (+) or faster (-) than the session's average rep of the same distance.
+      - name: is_fastest_rep
+        description: True for the session's fastest rep at this distance (ties all flagged).
+      - name: recovery_time_s
+        description: Time since the previous rep ended. Null for the first rep.
+      - name: recovery_distance_m
+        description: Distance covered during the recovery. Near zero means a standing rest.

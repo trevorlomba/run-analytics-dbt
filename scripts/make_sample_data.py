@@ -30,6 +30,9 @@ GOALS = {
     "Lift + Run": ((1900, 180, 145, 60), (2000, 180, 155, 65), (2800, 180, 350, 75)),
 }
 HR_START = dt.date(2026, 9, 1)  # HR monitor "arrives" partway through, like the real data
+# Track sessions run on Tuesdays, with no lap button pressed: reps have to be
+# found from the stream alone. (reps, rep distance m, recovery kind, recovery amount)
+WORKOUTS = [(8, 800, "jog_m", 400), (6, 1000, "stand_s", 90), (10, 400, "jog_m", 200)]
 
 
 def write(name, header, rows):
@@ -64,6 +67,36 @@ def simulate_run(run_date, activity_id):
     return samples
 
 
+def simulate_workout(run_date, workout):
+    """Warm-up, reps with jog or standing recoveries, cool-down. Track GPS reads
+    a little long and speed is noisy, like the real thing."""
+    reps, rep_m, recovery, amount = workout
+    rep_speed = {400: 5.0, 800: 4.7, 1000: 4.55}[rep_m]
+    easy = 1000 / rng.uniform(320, 345)
+    plan = [("m", 2000, easy)]
+    for i in range(reps):
+        # Slight fade over the session, plus rep-to-rep wobble.
+        plan.append(("m", rep_m, rep_speed * (1 - 0.004 * i) * (1 + rng.gauss(0, 0.012))))
+        if i < reps - 1:
+            plan.append(("m", amount, 2.3) if recovery == "jog_m" else ("s", amount, 0.0))
+    plan.append(("m", 1600, easy * 0.95))
+
+    has_hr = run_date >= HR_START
+    samples, true_dist, speed, hr, t = [], 0.0, 0.0, 110.0, 0
+    for kind, amount_, target in plan:
+        seg_start_d, seg_start_t = true_dist, t
+        while (true_dist - seg_start_d if kind == "m" else t - seg_start_t) < amount_:
+            speed += 0.6 * (target - speed)                 # a couple of seconds to change pace
+            gps_speed = max(0.0, speed + rng.gauss(0, 0.12 if target else 0.05))
+            hr += 0.15 * (95 + 17 * speed - hr)
+            samples.append((t, round(true_dist * 1.015, 1),
+                            round(hr + rng.gauss(0, 1.5)) if has_hr else None,
+                            round(20 + rng.gauss(0, 0.2), 1), round(gps_speed, 2)))
+            true_dist += speed * 2
+            t += 2
+    return samples
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     laps, km_rows, mile_rows, streams = [], [], [], []
@@ -74,10 +107,13 @@ def main():
             run_dates.append(day)
         day += dt.timedelta(days=1)
 
+    tuesdays = [d for d in run_dates if d.weekday() == 1]
+    workouts = {d: WORKOUTS[k % len(WORKOUTS)] for k, d in enumerate(tuesdays)}
+
     for i, run_date in enumerate(run_dates):
         activity_id = 30000000000 + i * 7919
         name = rng.choice(["Morning Run", "Evening Run", "Afternoon Run", "River Loop"])
-        s = simulate_run(run_date, activity_id)
+        s = simulate_workout(run_date, workouts[run_date]) if run_date in workouts else simulate_run(run_date, activity_id)
         distance = s[-1][1]
         elapsed = s[-1][0]
         moving = sum(2 for x in s if x[4] > 0.5)

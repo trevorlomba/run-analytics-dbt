@@ -123,6 +123,9 @@
   .key-bar{width:10px;height:10px;border-radius:2px;background:var(--accent-soft)}
   .key-area{width:14px;height:10px;background:var(--surface-2);border-top:1.5px solid var(--ink-faint)}
   .key-hr{width:14px;height:0;border-top:2px solid var(--hr)}
+  .reps{display:flex;flex-direction:column;gap:10px}
+  td.faster{color:var(--good)}
+  td.slower{color:var(--warn)}
 </style>
 
 <div class="wrap">
@@ -187,10 +190,19 @@
   </section>
 
   <section class="panel" id="explorer">
-    <div class="panel-head"><span class="panel-title">Run explorer</span><span class="mart">fct_run_splits · fct_run_route_profile</span></div>
+    <div class="panel-head"><span class="panel-title">Run explorer</span><span class="mart">fct_run_splits · fct_workout_reps · fct_run_route_profile</span></div>
     <label class="sub-title" for="run-select">Run</label>
     <select id="run-select"></select>
     <div class="run-stats" id="run-stats"></div>
+    <div class="reps" id="reps-block" hidden>
+      <div class="panel-head">
+        <span class="sub-title" id="reps-title">Reps</span>
+        <div class="legend"><span><i class="key-bar"></i>Rep</span><span><i class="key-line dash"></i>Session average</span></div>
+      </div>
+      <div class="chart" id="reps-chart"></div>
+      <p class="panel-note">Found from the speed stream, no lap button needed. Times are good to about a second; GPS distance is snapped to the nearest standard rep distance.</p>
+      <div class="table-wrap"><table id="reps-table"></table></div>
+    </div>
     <div class="panel-head">
       <span class="sub-title" id="splits-title">Splits</span>
       <div class="legend"><span><i class="key-bar"></i>Actual pace</span><span><i class="key-tick"></i>Grade-adjusted</span></div>
@@ -615,7 +627,7 @@ function renderRunsTable() {
       const pickable = x.is_valid_run && DATA.splits[x.activity_id];
       return `<tr${pickable ? ` class="pick${x.activity_id === state.runId ? " selected" : ""}" tabindex="0" data-id="${x.activity_id}"` : ""}>
       <td>${fmtDate(x.run_date)}</td>
-      <td><span class="name" title="${esc(x.activity_name)}">${esc(x.activity_name)}</span>${!x.is_valid_run ? '<span class="tag">accidental start</span>' : x.is_manual_entry ? '<span class="tag">manual entry</span>' : x.is_negative_split ? '<span class="tag good">negative split</span>' : ""}</td>
+      <td><span class="name" title="${esc(x.activity_name)}">${esc(x.activity_name)}</span>${!x.is_valid_run ? '<span class="tag">accidental start</span>' : x.is_manual_entry ? '<span class="tag">manual entry</span>' : x.workout_label ? `<span class="tag">${esc(x.workout_label)}</span>` : x.is_negative_split ? '<span class="tag good">negative split</span>' : ""}</td>
       <td>${num(dist(x.distance_m), 2)}</td>
       <td>${x.is_valid_run ? fmtPace(runPace(x)) : "–"}</td>
       <td class="${x.avg_hr == null ? "muted" : ""}">${x.avg_hr == null ? "no HR" : Math.round(x.avg_hr)}</td>
@@ -654,7 +666,7 @@ function selectRun(id, scroll) {
 }
 function renderRun() {
   const x = DATA.runs.find(r => r.activity_id === state.runId), u = U();
-  if (!x) { $("run-stats").textContent = "No runs with split detail yet."; $("splits-chart").innerHTML = ""; $("profile-chart").innerHTML = ""; return; }
+  if (!x) { $("run-stats").textContent = "No runs with split detail yet."; $("reps-block").hidden = true; $("splits-chart").innerHTML = ""; $("profile-chart").innerHTML = ""; return; }
   const splits = (DATA.splits[x.activity_id] || {})[state.units] || [];
   const full = splits.filter(s => !s[6]);
   const gapW = full.filter(s => s[2] != null);
@@ -669,8 +681,10 @@ function renderRun() {
     x.elev_gain_m != null ? `<span><b>${Math.round(x.elev_gain_m * u.elevPerM)}</b> ${u.elev} gain</span>` : "",
     x.avg_hr ? `<span><b>${Math.round(x.avg_hr)}</b> avg · <b>${Math.round(x.max_hr)}</b> max bpm</span>` : "",
     stopped > 60 ? `<span><b>${dur(stopped)}</b> stopped</span>` : "",
+    x.workout_label ? `<span class="tag" style="margin:0">${esc(x.workout_label)}</span>` : "",
     x.is_negative_split ? `<span class="tag good" style="margin:0">negative split</span>` : "",
   ].join("");
+  renderReps(DATA.reps[x.activity_id] || []);
   $("splits-title").textContent = state.units === "mi" ? "Mile splits" : "Kilometer splits";
   renderSplits(splits);
   renderProfile(DATA.profile[x.activity_id] || []);
@@ -703,6 +717,55 @@ function renderSplits(splits) {
       ...toPx(svg, w, h, cx, top)));
     hit.addEventListener("pointerleave", () => hideTip(tip));
   });
+}
+// Rep times as m:ss, rounding before splitting so 2:59.6 reads 3:00, not 2:60.
+const fmtTime = s => { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+function renderReps(reps) {
+  $("reps-block").hidden = !reps.length;
+  if (!reps.length) return;
+  const c = $("reps-chart"), u = U();
+  // r = [distance_m, time_s, vs_avg_s, avg_hr, recovery_s, recovery_m, is_fastest]
+  const rs = reps.map((r, i) => ({i, m: r[0], t: r[1], vs: r[2], hr: r[3], recT: r[4], recM: r[5], best: r[6]}));
+  // One distance: compare rep times directly. A ladder: compare pace instead.
+  const same = rs.every(r => r.m === rs[0].m);
+  const val = r => same ? r.t : r.t / r.m * u.m, fmtVal = same ? fmtTime : fmtPace;
+  $("reps-title").textContent = same ? `Reps · ${rs.length} × ${rs[0].m} m` : `Reps · pace /${u.label}`;
+  const avg = rs.reduce((a, r) => a + val(r), 0) / rs.length;
+  const {svg, tip, w, h} = frame(c, 190);
+  const m = {t: 22, r: 8, b: 26, l: 48};
+  const {lo, hi, ticks} = paceScale(rs.map(val), 2, 3);
+  const base = h - m.b, y = v => m.t + (v - lo) / (hi - lo) * (base - m.t);   // faster = taller bar
+  for (const v of ticks) {
+    const yy = y(v);
+    el("line", {x1: m.l, x2: w - m.r, y1: yy, y2: yy, class: v === hi ? "base" : "grid"}, svg);
+    text(svg, {x: m.l - 8, y: yy + 3.5, "text-anchor": "end", class: "ax"}, fmtVal(v));
+  }
+  const bw = (w - m.l - m.r) / Math.max(rs.length, 4), barW = Math.max(Math.min(bw * 0.6, 48), 4);
+  rs.forEach(r => {
+    const cx = m.l + bw * r.i + bw / 2, top = y(val(r));
+    bar(svg, cx - barW / 2, top, barW, base, r.best ? "var(--accent)" : "var(--accent-soft)");
+    if (bw >= 30) text(svg, {x: cx, y: top - 6, "text-anchor": "middle", class: "dlabel"}, fmtVal(val(r)));
+    text(svg, {x: cx, y: h - m.b + 16, "text-anchor": "middle", class: "ax"}, same || bw < 40 ? `${r.i + 1}` : `${r.m}`);
+    const hit = el("rect", {x: m.l + bw * r.i, y: m.t, width: bw, height: base - m.t, fill: "transparent"}, svg);
+    hit.addEventListener("pointerenter", () => showTip(tip, c,
+      `<b>Rep ${r.i + 1} · ${fmtTime(r.t)}</b> for ${r.m} m${r.best ? " · fastest" : ""}` +
+      `<br>${fmtPace(r.t / r.m * u.m)}/${u.label}${r.hr ? ` · ${r.hr} bpm` : ""}`,
+      ...toPx(svg, w, h, cx, top)));
+    hit.addEventListener("pointerleave", () => hideTip(tip));
+  });
+  el("line", {x1: m.l, x2: w - m.r, y1: y(avg), y2: y(avg), stroke: "var(--ink-muted)", "stroke-width": 1.5, "stroke-dasharray": "5 4"}, svg);
+
+  const rec = r => r.recT == null ? "–" : `${fmtTime(r.recT)}${r.recM != null && r.recM < 50 ? " standing" : r.recM != null ? ` · ${Math.round(r.recM)} m` : ""}`;
+  $("reps-table").innerHTML = `<thead><tr><th>Rep</th><th>Distance</th><th>Time</th><th>Pace /${u.label}</th><th>vs avg</th><th>Recovery</th><th>Avg HR</th></tr></thead><tbody>` +
+    rs.map(r => `<tr>
+      <td>${r.i + 1}${r.best ? '<span class="tag good">fastest</span>' : ""}</td>
+      <td>${r.m} m</td>
+      <td><b>${fmtTime(r.t)}</b></td>
+      <td>${fmtPace(r.t / r.m * u.m)}</td>
+      <td class="${r.vs <= -0.5 ? "faster" : r.vs >= 0.5 ? "slower" : "muted"}">${r.vs > 0 ? "+" : r.vs < 0 ? "−" : "±"}${num(Math.abs(r.vs), 1)} s</td>
+      <td class="${r.recT == null ? "muted" : ""}">${rec(r)}</td>
+      <td class="${r.hr ? "" : "muted"}">${r.hr ? r.hr : "–"}</td>
+    </tr>`).join("") + "</tbody>";
 }
 function renderProfile(prof) {
   const c = $("profile-chart"), u = U();
