@@ -120,7 +120,8 @@ def main(out, sample, standalone):
         "reps": grouped(con, """
             select cast(activity_id as varchar), rep_distance_m, rep_time_s, rep_time_vs_avg_s,
                    round(avg_hr), recovery_time_s, recovery_distance_m, is_fastest_rep,
-                   case when nominal_distance_m is not null then round(gps_distance_m) end
+                   case when nominal_distance_m is not null then round(gps_distance_m) end,
+                   start_elapsed_s, round(start_distance_m)
             from fct_workout_reps order by activity_id, rep_number"""),
         # Raw speed streams for recent runs, so the page can re-find reps from a hint
         # ("4 x 800"). Delta-encoded ints keep ~45 days to a few hundred KB.

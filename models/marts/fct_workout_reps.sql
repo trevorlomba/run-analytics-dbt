@@ -6,6 +6,7 @@ select
     f.run_date,
     r.rep_number,
     r.start_elapsed_s,
+    r.start_distance_m,
     r.rep_time_s,
     r.rep_distance_m,
     r.nominal_distance_m,

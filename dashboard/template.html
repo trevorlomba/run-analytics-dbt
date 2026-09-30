@@ -232,7 +232,7 @@
     <div class="chart" id="splits-chart"></div>
     <div class="panel-head">
       <span class="sub-title">Along the route · ~500 m rolling pace</span>
-      <div class="legend"><span><i class="key-line"></i>Pace</span><span><i class="key-area"></i>Elevation</span><span id="hr-key"><i class="key-hr"></i>Heart rate</span></div>
+      <div class="legend"><span><i class="key-line"></i>Pace</span><span><i class="key-area"></i>Elevation</span><span id="rep-key" hidden><i class="key-band"></i>Reps</span><span id="hr-key"><i class="key-hr"></i>Heart rate</span></div>
     </div>
     <div class="chart" id="profile-chart"></div>
   </section>
@@ -708,8 +708,7 @@ function renderRun() {
   ].join("");
   renderReps(x.activity_id);
   $("splits-title").textContent = state.units === "mi" ? "Mile splits" : "Kilometer splits";
-  renderSplits(splits);
-  renderProfile(DATA.profile[x.activity_id] || []);
+  renderSplits(splits);   // the route profile is drawn by renderReps, so it can mark the reps
 }
 function renderSplits(splits) {
   const c = $("splits-chart"), u = U();
@@ -857,21 +856,22 @@ function findReps(st, sets) {
   });
   return out.map((r, k) => ({
     rep: k + 1, start_s: +r.start.toFixed(1), time_s: +(r.end - r.start).toFixed(1), distance_m: r.m,
-    gps_distance_m: Math.round(r.gps),
+    gps_distance_m: Math.round(r.gps), start_distance_m: Math.round(distAt(r.start)),
     rec_time_s: k ? +(r.start - out[k - 1].end).toFixed(1) : null,
     rec_distance_m: k ? Math.round(distAt(r.start) - distAt(out[k - 1].end)) : null,
   }));
 }
 
-// Both sources become the same row shape: {i, m, t, vs, hr, recT, recM, best, gps}.
+// Both sources become the same row shape: {i, m, t, vs, hr, recT, recM, best, gps, sT, sD}
+// (sT / sD: seconds and GPS metres into the run where the rep started).
 function fromDetected(reps) {
-  // r = [distance_m, time_s, vs_avg_s, avg_hr, recovery_s, recovery_m, is_fastest, gps_m]
-  return reps.map((r, i) => ({i, m: r[0], t: r[1], vs: r[2], hr: r[3], recT: r[4], recM: r[5], best: r[6], gps: r[7]}));
+  // r = [distance_m, time_s, vs_avg_s, avg_hr, recovery_s, recovery_m, is_fastest, gps_m, start_s, start_m]
+  return reps.map((r, i) => ({i, m: r[0], t: r[1], vs: r[2], hr: r[3], recT: r[4], recM: r[5], best: r[6], gps: r[7], sT: r[8] ?? null, sD: r[9] ?? null}));
 }
 function fromSaved(body) {
   const num_ = x => Number.isFinite(+x) && x !== null && x !== "" ? +x : null;
   const rs = (Array.isArray(body.reps) ? body.reps : [])
-    .map(r => ({m: Math.round(num_(r.distance_m) || 0), t: num_(r.time_s) || 0, hr: num_(r.avg_hr), recT: num_(r.rec_time_s), recM: num_(r.rec_distance_m), gps: num_(r.gps_distance_m)}))
+    .map(r => ({m: Math.round(num_(r.distance_m) || 0), t: num_(r.time_s) || 0, hr: num_(r.avg_hr), recT: num_(r.rec_time_s), recM: num_(r.rec_distance_m), gps: num_(r.gps_distance_m), sT: num_(r.start_s), sD: num_(r.start_distance_m)}))
     .filter(r => r.m > 0 && r.t > 0)
     .map((r, i) => ({...r, i}));
   const byDist = {};
@@ -886,8 +886,15 @@ function fromSaved(body) {
 
 // Rep times as m:ss, rounding before splitting so 2:59.6 reads 3:00, not 2:60.
 const fmtTime = s => { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
-let toolsRunId = null;
+// Time into the run: m:ss, or h:mm:ss past an hour.
+const fmtClock = s => { s = Math.round(s); return s < 3600 ? fmtTime(s) : `${Math.floor(s / 3600)}:${fmtTime(s % 3600).padStart(5, "0")}`; };
+let toolsRunId = null, repBands = [];
 function renderReps(runId) {
+  const rs = drawReps(runId);
+  repBands = rs.filter(r => r.sD != null);
+  renderProfile(DATA.profile[runId] || []);
+}
+function drawReps(runId) {
   loadSaved(runId);
   const saved = savedReps[runId] || null;
   const rs = saved ? fromSaved(saved) : fromDetected(DATA.reps[runId] || []);
@@ -895,7 +902,7 @@ function renderReps(runId) {
   $("reps-block").hidden = !rs.length && !saved && !canHint;
   $("reps-body").hidden = !rs.length;
   renderRepTools(runId, saved, rs.length, canHint);
-  if (!rs.length) return;
+  if (!rs.length) return rs;
   $("reps-caption").textContent = saved
     ? "Found from your hint, using GPS speed · times ±1 s · distance as you gave it, GPS reading below it"
     : "Detected from GPS speed, no lap button needed · times ±1 s · distance rounded to a standard length, GPS reading below it";
@@ -924,7 +931,8 @@ function renderReps(runId) {
     const hit = el("rect", {x: m.l + bw * r.i, y: m.t, width: bw, height: base - m.t, fill: "transparent"}, svg);
     hit.addEventListener("pointerenter", () => showTip(tip, c,
       `<b>Rep ${r.i + 1} · ${fmtTime(r.t)}</b> for ${fmtMetres(r.m)}${r.gps ? ` (GPS ${r.gps} m)` : ""}${r.best ? " · fastest" : ""}` +
-      `<br>${fmtPace(r.t / r.m * u.m)}/${u.label}${r.hr ? ` · ${r.hr} bpm` : ""}`,
+      `<br>${fmtPace(r.t / r.m * u.m)}/${u.label}${r.hr ? ` · ${r.hr} bpm` : ""}` +
+      (r.sT != null ? `<br>Started ${fmtClock(r.sT)} in${r.sD != null ? ` · ${num(dist(r.sD), 2)} ${u.label}` : ""}` : ""),
       ...toPx(svg, w, h, cx, top)));
     hit.addEventListener("pointerleave", () => hideTip(tip));
   });
@@ -932,9 +940,10 @@ function renderReps(runId) {
   $("reps-avg-key").hidden = !same;
 
   const rec = r => r.recT == null ? "–" : `${fmtTime(r.recT)}${r.recM != null && r.recM < 50 ? " standing" : r.recM != null ? ` · ${Math.round(r.recM)} m` : ""}`;
-  $("reps-table").innerHTML = `<thead><tr><th>Rep</th><th>Distance</th><th>Time</th><th>Pace /${u.label}</th><th>vs avg</th><th>Recovery</th><th>Avg HR</th></tr></thead><tbody>` +
+  $("reps-table").innerHTML = `<thead><tr><th>Rep</th><th>Start</th><th>Distance</th><th>Time</th><th>Pace /${u.label}</th><th>vs avg</th><th>Recovery</th><th>Avg HR</th></tr></thead><tbody>` +
     rs.map(r => `<tr>
       <td>${r.i + 1}${r.best ? '<span class="tag good">fastest</span>' : ""}</td>
+      <td class="${r.sT == null ? "muted" : ""}">${r.sT == null ? "–" : fmtClock(r.sT)}${r.sD != null ? `<span class="gps">${num(dist(r.sD), 2)} ${u.label}</span>` : ""}</td>
       <td>${fmtMetres(r.m)}${r.gps ? `<span class="gps">GPS ${r.gps}</span>` : ""}</td>
       <td><b>${fmtTime(r.t)}</b></td>
       <td>${fmtPace(r.t / r.m * u.m)}</td>
@@ -942,6 +951,7 @@ function renderReps(runId) {
       <td class="${r.recT == null ? "muted" : ""}">${rec(r)}</td>
       <td class="${r.hr ? "" : "muted"}">${r.hr ? r.hr : "–"}</td>
     </tr>`).join("") + "</tbody>";
+  return rs;
 }
 function renderRepTools(runId, saved, repCount, canHint) {
   $("reps-tools").hidden = !saved && !canHint;
@@ -1028,6 +1038,17 @@ function renderProfile(prof) {
     el("line", {x1: m.l, x2: w - m.r, y1: yy, y2: yy, class: "grid"}, svg);
     text(svg, {x: m.l - 8, y: yy + 3.5, "text-anchor": "end", class: "ax"}, fmtPace(v));
   }
+  // Shade each rep's stretch of the route, numbered to match the reps table.
+  $("rep-key").hidden = !repBands.length;
+  const bandOf = d => repBands.find(r => d >= r.sD && d <= r.sD + (r.gps || r.m));
+  let lastLabel = -Infinity;
+  repBands.forEach(r => {
+    const x0 = x(Math.max(0, r.sD)), x1 = x(Math.min(maxD, r.sD + (r.gps || r.m)));
+    if (x1 <= m.l || x0 >= w - m.r) return;
+    el("rect", {x: x0, y: m.t, width: Math.max(x1 - x0, 2), height: h - m.t - m.b, fill: "var(--accent-wash)"}, svg);
+    const lx = (x0 + x1) / 2;
+    if (lx - lastLabel >= 10) { text(svg, {x: lx, y: m.t - 3, "text-anchor": "middle", class: "ax"}, r.i + 1); lastLabel = lx; }
+  });
   const ap = prof.filter(p => p[2] != null);
   el("path", {d: `M${x(ap[0][0])},${h - m.b} ` + ap.map(p => `L${x(p[0]).toFixed(1)},${yA(p[2]).toFixed(1)}`).join("") + ` L${x(ap[ap.length - 1][0])},${h - m.b}Z`, fill: "var(--surface-2)", stroke: "var(--ink-faint)", "stroke-width": 1}, svg);
   const hp = pts.filter(p => p.hr);
@@ -1046,7 +1067,8 @@ function renderProfile(prof) {
     const b = svg.getBoundingClientRect(), px = (e.clientX - b.left) * (w / b.width);
     const p = pts.reduce((a, q) => Math.abs(x(q.d) - px) < Math.abs(x(a.d) - px) ? q : a, pts[0]);
     cross.setAttribute("x1", x(p.d)); cross.setAttribute("x2", x(p.d)); cross.setAttribute("opacity", 1);
-    showTip(tip, c, `<b>${fmtPace(p.pace)}/${u.label}</b> at ${num(p.d / u.m, 2)} ${u.label}<br>` +
+    const band = bandOf(p.d);
+    showTip(tip, c, `<b>${fmtPace(p.pace)}/${u.label}</b> at ${num(p.d / u.m, 2)} ${u.label}${band ? ` · rep ${band.i + 1}` : ""}<br>` +
       (p.alt != null ? `${Math.round(p.alt * u.elevPerM)} ${u.elev}` : "") + (p.hr ? ` · ${Math.round(p.hr)} bpm` : ""), ...toPx(svg, w, h, x(p.d), yP(p.pace)));
   });
   hit.addEventListener("pointerleave", () => { hideTip(tip); cross.setAttribute("opacity", 0); });
