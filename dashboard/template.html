@@ -133,6 +133,8 @@
   .hint-form input{font:inherit;font-size:16px;color:var(--ink);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:5px 9px;width:14em;max-width:100%}
   .hint-form input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   .pill:disabled{opacity:.55;cursor:default}
+  .run-type{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;font-size:13px;color:var(--ink-muted)}
+  .run-type .caption{margin:0}
   .caption{font-size:11.5px;color:var(--ink-faint);margin:-2px 0 4px;line-height:1.45}
   td.faster{color:var(--good)}
   td.slower{color:var(--warn)}
@@ -198,6 +200,14 @@
     <label class="sub-title" for="run-select">Run</label>
     <select id="run-select"></select>
     <div class="run-stats" id="run-stats"></div>
+    <div class="run-type" id="run-type" hidden>
+      <span class="sub-title" id="run-type-label">Count this run as</span>
+      <div class="seg" id="run-type-seg" role="group" aria-labelledby="run-type-label">
+        <button type="button" class="pill" data-type="run" aria-pressed="false">Normal run</button>
+        <button type="button" class="pill" data-type="workout" aria-pressed="false">Workout</button>
+      </div>
+      <p class="caption" id="run-type-status" aria-live="polite"></p>
+    </div>
     <div class="reps" id="reps-block" hidden>
       <div class="reps" id="reps-body">
         <div class="panel-head">
@@ -651,7 +661,7 @@ function renderRunsTable() {
       const pickable = x.is_valid_run && DATA.splits[x.activity_id];
       return `<tr${pickable ? ` class="pick${x.activity_id === state.runId ? " selected" : ""}" tabindex="0" data-id="${x.activity_id}"` : ""}>
       <td>${fmtDate(x.run_date)}</td>
-      <td><span class="name" title="${esc(x.activity_name)}">${esc(x.activity_name)}</span>${!x.is_valid_run ? '<span class="tag">accidental start</span>' : x.is_manual_entry ? '<span class="tag">manual entry</span>' : x.workout_label ? `<span class="tag">${esc(x.workout_label)}</span>` : x.is_negative_split ? '<span class="tag good">negative split</span>' : ""}</td>
+      <td><span class="name" title="${esc(x.activity_name)}">${esc(x.activity_name)}</span>${!x.is_valid_run ? '<span class="tag">accidental start</span>' : x.is_manual_entry ? '<span class="tag">manual entry</span>' : workoutTag(x) ? `<span class="tag">${esc(workoutTag(x))}</span>` : x.is_negative_split ? '<span class="tag good">negative split</span>' : ""}</td>
       <td>${num(dist(x.distance_m), 2)}</td>
       <td>${x.is_valid_run ? fmtPace(runPace(x)) : "–"}</td>
       <td class="${x.avg_hr == null ? "muted" : ""}">${x.avg_hr == null ? "no HR" : Math.round(x.avg_hr)}</td>
@@ -690,7 +700,7 @@ function selectRun(id, scroll) {
 }
 function renderRun() {
   const x = DATA.runs.find(r => r.activity_id === state.runId), u = U();
-  if (!x) { $("run-stats").textContent = "No runs with split detail yet."; $("reps-block").hidden = true; $("splits-chart").innerHTML = ""; $("profile-chart").innerHTML = ""; return; }
+  if (!x) { $("run-stats").textContent = "No runs with split detail yet."; $("reps-block").hidden = true; $("run-type").hidden = true; $("splits-chart").innerHTML = ""; $("profile-chart").innerHTML = ""; return; }
   const splits = (DATA.splits[x.activity_id] || {})[state.units] || [];
   const full = splits.filter(s => !s[6]);
   const gapW = full.filter(s => s[2] != null);
@@ -705,7 +715,7 @@ function renderRun() {
     x.elev_gain_m != null ? `<span><b>${Math.round(x.elev_gain_m * u.elevPerM)}</b> ${u.elev} gain</span>` : "",
     x.avg_hr ? `<span><b>${Math.round(x.avg_hr)}</b> avg · <b>${Math.round(x.max_hr)}</b> max bpm</span>` : "",
     stopped > 60 ? `<span><b>${dur(stopped)}</b> stopped</span>` : "",
-    x.workout_label ? `<span class="tag" style="margin:0">${esc(x.workout_label)}</span>` : "",
+    workoutTag(x) ? `<span class="tag" style="margin:0">${esc(workoutTag(x))}</span>` : "",
     x.is_negative_split ? `<span class="tag good" style="margin:0">negative split</span>` : "",
   ].join("");
   renderReps(x.activity_id);
@@ -750,6 +760,7 @@ const repStore = {db: null, owner: false};
     const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
     repStore.db = db;
     repStore.owner = !!(db && user && await user.isOwner());
+    if (db) loadRunTypes();
     if (db && state.runId) renderReps(state.runId);
   } catch (e) { /* no store: detection only */ }
 })();
@@ -763,6 +774,124 @@ async function loadSaved(runId) {
   loadingSaved.delete(runId);
   if (state.runId === runId) renderReps(runId);
 }
+
+/* ---------- run type: the owner can mark a run a workout or a normal run ---------- */
+// Kept as run_type/<activity_id> = {type: "workout" | "run"}. No document means "as detected":
+// dbt calls a run a workout when it finds at least two reps in the speed stream.
+const runTypes = {};             // runId -> "workout" | "run"
+async function loadRunTypes() {
+  try {
+    const snap = await repStore.db.collection("run_type").get();
+    for (const d of snap.docs) {
+      const t = d.exists && d.data().type;
+      if (t === "workout" || t === "run") runTypes[d.id] = t;
+    }
+  } catch (e) { return; }
+  renderRunsTable();
+  if (state.runId) renderRun();
+}
+const detectedWorkout = x => !!x.workout_label;
+const isWorkout = x => runTypes[x.activity_id] ? runTypes[x.activity_id] === "workout" : detectedWorkout(x);
+function workoutTag(x) {
+  if (!isWorkout(x)) return "";
+  const saved = savedReps[x.activity_id];
+  if (saved && saved.hint_label) return saved.hint_label;
+  if (x.workout_label) return x.workout_label;
+  const auto = autoReps[x.activity_id];
+  return auto && auto.label ? auto.label : "workout";
+}
+function renderRunType(x) {
+  const canSet = !!(repStore.owner && repStore.db);
+  // Readers only see the outcome (tags and reps); the switch is the owner's.
+  $("run-type").hidden = !canSet;
+  const cur = isWorkout(x) ? "workout" : "run";
+  $("run-type-seg").querySelectorAll("button").forEach(b => {
+    b.classList.toggle("active", b.dataset.type === cur);
+    b.setAttribute("aria-pressed", String(b.dataset.type === cur));
+  });
+  if (typeStatusRunId !== x.activity_id) { typeStatusRunId = x.activity_id; $("run-type-status").textContent = ""; }
+  if (!$("run-type-status").textContent) $("run-type-status").textContent = runTypes[x.activity_id]
+    ? "Set by you"
+    : `Detected: ${detectedWorkout(x) ? "workout" : "normal run"}`;
+}
+let typeStatusRunId = null, typeWriting = false;
+$("run-type-seg").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-type]");
+  if (!b || typeWriting || !repStore.db) return;
+  const runId = state.runId, x = DATA.runs.find(r => r.activity_id === runId);
+  if (!x || (isWorkout(x) ? "workout" : "run") === b.dataset.type) return;
+  const prev = runTypes[runId];
+  // Picking what detection already says clears the override instead of storing a copy of it.
+  const matchesDetected = (b.dataset.type === "workout") === detectedWorkout(x);
+  if (matchesDetected) delete runTypes[runId]; else runTypes[runId] = b.dataset.type;
+  typeWriting = true;
+  renderRun(); renderRunsTable();
+  $("run-type-status").textContent = "Saving…";
+  try {
+    const ref = repStore.db.doc("run_type/" + runId);
+    if (matchesDetected) await ref.delete();
+    else await ref.set({activity_id: runId, type: b.dataset.type, saved_at: new Date().toISOString()});
+    if (state.runId === runId) $("run-type-status").textContent = matchesDetected ? "Back to detected ✓" : "Saved ✓";
+  } catch (err) {
+    if (prev) runTypes[runId] = prev; else delete runTypes[runId];
+    renderRun(); renderRunsTable();
+    if (state.runId === runId) $("run-type-status").textContent = saveError(err);
+  }
+  typeWriting = false;
+});
+
+// A run marked as a workout that dbt found no reps in: find them here from the speed stream,
+// with the same idea as int_activity__workout_reps (smoothed speed above the midpoint of easy
+// and fast pace, short dips merged) but without the checks that decide whether it was a
+// workout at all — the owner already said it was. Each effort is snapped to a standard
+// distance and, as in dbt, must beat the runner's median pace of the last 60 days by 10%
+// (otherwise every run's fastest stretches look like reps); findReps then places the edges.
+// Median average speed of runs of 1 mile or more in the 60 days up to this one (as dbt's usual_speed).
+function usualSpeed(x) {
+  const end = dateObj(x.run_date), start = new Date(end); start.setDate(start.getDate() - 60);
+  const v = DATA.runs.filter(r => r.distance_m >= 1600 && r.moving_time_s > 0 && !r.is_manual_entry
+      && dateObj(r.run_date) >= start && dateObj(r.run_date) <= end)
+    .map(r => r.distance_m / r.moving_time_s).sort((a, b) => a - b);
+  return !v.length ? 0 : v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
+}
+const autoReps = {};             // runId -> {reps, sets, label} | null
+const STANDARD_M = [200, 300, 400, 500, 600, 800, 1000, 1200, 1500, 1609, 2000, 3000, 5000];
+function autoDetect(runId) {
+  if (runId in autoReps) return autoReps[runId];
+  const st = streamOf(runId);
+  if (!st) return (autoReps[runId] = null);
+  const {t, d, v} = st, len = t.length, sm = new Array(len);
+  for (let i = 0, lo = 0, hi = 0, sum = 0; i < len; i++) {      // mean speed over t ± 6 s
+    while (hi < len && t[hi] <= t[i] + 6) sum += v[hi++];
+    while (t[lo] < t[i] - 6) sum -= v[lo++];
+    sm[i] = sum / (hi - lo);
+  }
+  const moving = sm.filter(x => x > 1).sort((a, b) => a - b);
+  if (moving.length < 60) return (autoReps[runId] = null);
+  const q = p => moving[Math.min(moving.length - 1, Math.floor(p * moving.length))];
+  const cut = (q(0.25) + q(0.9)) / 2;
+  const efforts = [];
+  let cur = null;
+  for (let i = 0; i < len; i++) {
+    if (sm[i] < cut) continue;
+    if (cur && t[i] - t[cur.j] <= 8) cur.j = i;
+    else efforts.push(cur = {i, j: i});
+  }
+  const usual = usualSpeed(DATA.runs.find(r => r.activity_id === runId));
+  const sets = [];
+  for (const e of efforts) {
+    const secs = t[e.j] - t[e.i], gps = d[e.j] - d[e.i];
+    if (secs < 30 || gps < 100) continue;
+    const near = STANDARD_M.reduce((a, m) => Math.abs(Math.log(gps / m)) < Math.abs(Math.log(gps / a)) ? m : a);
+    const m = Math.abs(Math.log(gps / near)) < Math.log(1.1) ? near : Math.round(gps / 100) * 100;
+    if (m / secs < 1.1 * usual) continue;
+    const last = sets[sets.length - 1];
+    if (last && last.m === m) last.n++; else sets.push({n: 1, m});
+  }
+  const reps = sets.length ? findReps(st, sets) : [];
+  return (autoReps[runId] = reps.length ? {reps, sets, label: hintLabel(sets)} : null);
+}
+
 const fmtStamp = iso => new Date(iso).toLocaleString(undefined, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
 const fmtMetres = m => m % 1000 === 0 && m >= 1000 ? `${m / 1000} km` : m === 1609 ? "1 mi" : `${m} m`;
 
@@ -896,16 +1025,24 @@ function renderReps(runId) {
 }
 function drawReps(runId) {
   loadSaved(runId);
+  const x = DATA.runs.find(r => r.activity_id === runId);
+  if (x) renderRunType(x);
+  // A normal run shows splits only, even if detection or a hint found reps.
+  if (!x || !isWorkout(x)) { $("reps-block").hidden = true; return []; }
   const saved = savedReps[runId] || null;
-  const rs = saved ? fromSaved(saved) : fromDetected(DATA.reps[runId] || []);
+  const detected = DATA.reps[runId] || [];
+  const auto = !saved && !detected.length ? autoDetect(runId) : null;
+  const rs = saved ? fromSaved(saved) : detected.length ? fromDetected(detected) : auto ? fromSaved(auto) : [];
   const canHint = !!(repStore.owner && DATA.streams && DATA.streams[runId]);
-  $("reps-block").hidden = !rs.length && !saved && !canHint;
+  $("reps-block").hidden = !rs.length && !saved && !canHint && !repStore.owner;
   $("reps-body").hidden = !rs.length;
   renderRepTools(runId, saved, rs.length, canHint);
   if (!rs.length) return rs;
   $("reps-caption").textContent = saved
     ? "Found from your hint, using GPS speed · times ±1 s · distance as you gave it, GPS reading below it"
-    : "Detected from GPS speed, no lap button needed · times ±1 s · distance rounded to a standard length, GPS reading below it";
+    : auto
+      ? "Found from GPS speed because you marked this a workout · times ±1 s · distance rounded to a standard length, GPS reading below it · not right? Tell it the workout"
+      : "Detected from GPS speed, no lap button needed · times ±1 s · distance rounded to a standard length, GPS reading below it";
   const c = $("reps-chart"), u = U();
   // One distance: compare rep times directly. A ladder: compare pace instead.
   const same = rs.every(r => r.m === rs[0].m);
@@ -954,10 +1091,10 @@ function drawReps(runId) {
   return rs;
 }
 function renderRepTools(runId, saved, repCount, canHint) {
-  $("reps-tools").hidden = !saved && !canHint;
+  $("reps-tools").hidden = !saved && !canHint && !(repStore.owner && !repCount);
   $("reps-source").textContent = saved
     ? (saved.source === "hint" && saved.hint_label ? `Set by you: ${saved.hint_label}` : `Confirmed by you${saved.saved_at ? " " + fmtStamp(saved.saved_at) : ""}`)
-    : repCount ? "" : "No reps detected. Was this a workout?";
+    : repCount ? "" : canHint ? "Couldn't pick out reps on its own. Tell it the workout." : "No reps found, and this run is too old to have its speed data on the page.";
   $("hint-form").hidden = !canHint;
   $("reps-reset").hidden = !(saved && repStore.owner);
   if (toolsRunId !== runId) {
