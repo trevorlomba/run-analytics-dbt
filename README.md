@@ -119,6 +119,11 @@ python scripts/build_dashboard.py --sample --standalone --out docs/index.html
   fast pace 25% above easy pace and at least two efforts. Each rep must also beat the
   runner's median pace over the last 60 days by 10%, judged on the snapped distance, so
   walk breaks in an easy run don't turn ordinary running into "reps".
+- **Detection can be overruled per run.** The run explorer has a *Normal run | Workout* switch
+  for the dashboard's owner, saved in the page's own db (`run_type/<activity_id>`). Normal run
+  hides any detected reps; Workout shows them, and if dbt found none the page finds them from
+  the run's speed stream with the same thresholding, skipping only the checks that decide
+  whether the run was a workout at all. Choosing what detection already says clears the override.
 - **Accidental starts are flagged, not deleted.** `is_valid_run` excludes activities under
   200 m from aggregates but keeps them for auditing.
 
