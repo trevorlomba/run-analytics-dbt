@@ -37,6 +37,11 @@ models:
               arguments:
                 min_value: 120    # 2:00/km: faster is a GPS glitch
                 max_value: 1200   # 20:00/km: slower is walking or stopped
+              config:
+                # A run's last split can be a few metres plus however long the
+                # watch kept recording after the run ended (e.g. 92 m in 380 s).
+                # Its "pace" is meaningless, so only check splits of 500 m+.
+                where: "distance_m >= 500"
 
   - name: stg_strava__mile_splits
     description: One row per mile split per activity.
