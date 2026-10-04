@@ -133,7 +133,7 @@ python scripts/build_dashboard.py --sample --standalone --out docs/index.html
 
 - Grain tests (`unique`, `not_null`, and a custom `unique_combination`) on every model.
 - Referential integrity (`relationships`) from splits and streams to activities.
-- Plausibility ranges (custom `value_in_range`): pace between 2:00 and 20:00 per km, HR between 40 and 220 bpm.
+- Plausibility ranges (custom `value_in_range`): pace between 2:00 and 20:00 per km on splits of 500 m or more (a run's leftover final split can include minutes of the watch still recording), HR between 40 and 220 bpm.
 - A custom `no_overlapping_windows` test on the goals history.
 - A unit test (`workout_reps_found_from_speed_alone`) feeds a hand-built stream through rep detection:
   three 800 m reps must come out at exactly 160 s with 90 s recoveries, and a steady run, a
