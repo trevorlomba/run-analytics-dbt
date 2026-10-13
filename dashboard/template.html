@@ -1242,14 +1242,23 @@ function weekStats(k) {
 }
 function buildReviewInput(x) {
   const u = U(), L = u.label, startName = state.weekStart === 1 ? "Monday" : "Sunday";
-  const wk = weekOf(x.run_date), cur = weekStats(wk), dataEnd = DATA.meta.date_max;
-  const inProgress = dataEnd < cur.end;
-  const daysLeft = inProgress ? Math.round((dateObj(cur.end) - dateObj(dataEnd)) / 864e5) : 0;
-  const prior = [1, 2, 3, 4].map(i => weekStats(shiftDay(wk, -7 * i))).filter(w => w.end >= DATA.meta.date_min);
-  const prevAvg = prior.length ? prior.reduce((a, w) => a + w.dist, 0) / prior.length : null;
+  const dataEnd = DATA.meta.date_max, wk = weekOf(x.run_date), cur = weekStats(wk);
+  // Timeline of every valid run, so the review sees what came before AND after this one.
+  const ordered = validRuns().slice().sort((a, b) => a.run_date === b.run_date ? (a.activity_id < b.activity_id ? -1 : 1) : (a.run_date < b.run_date ? -1 : 1));
+  const at = ordered.findIndex(r => r.activity_id === x.activity_id);
+  const before = ordered.slice(Math.max(at - 4, 0), at), later = ordered.slice(at + 1, at + 6);
+  const days = (a, b) => Math.round((dateObj(b) - dateObj(a)) / 864e5);
+  const gap = (a, b, dir) => { const d = days(a, b); return d === 0 ? `same day, ${dir === "before" ? "earlier" : "later"}` : `${d} day${d === 1 ? "" : "s"} ${dir} this run`; };
   const f1 = v => num(v, 1), pace = r => `${fmtPace(runPace(r))}/${L}`;
   const runLine = r => `${dayName(r.run_date)} ${r.run_date}: ${num(dist(r.distance_m), 2)} ${L} at ${pace(r)}` +
-    (r.avg_hr ? `, avg HR ${Math.round(r.avg_hr)}` : "") + (workoutTag(r) ? ` (${workoutTag(r)})` : "") + (r.activity_id === x.activity_id ? "  <-- THIS RUN" : "");
+    (r.avg_hr ? `, avg HR ${Math.round(r.avg_hr)}` : "") + (workoutTag(r) ? ` (${workoutTag(r)})` : "");
+  const weekLine = (w, tag) => `${w.k} to ${w.end}${tag ? ` [${tag}]` : ""}${w.end > dataEnd ? ` (in progress, data ends ${dataEnd})` : ""}: ` +
+    `${f1(w.dist)} ${L} over ${w.runs.length} run${w.runs.length === 1 ? "" : "s"}` + (w.runs.length ? `, longest ${f1(Math.max(...w.runs.map(r => dist(r.distance_m))))} ${L}` : "");
+  const weeksBefore = [4, 3, 2, 1].map(i => weekStats(shiftDay(wk, -7 * i))).filter(w => w.end >= DATA.meta.date_min);
+  const weeksAfter = [1, 2].map(i => weekStats(shiftDay(wk, 7 * i))).filter(w => w.k <= dataEnd);
+  const doneBefore = weeksBefore.filter(w => w.end <= dataEnd);
+  const avgBefore = doneBefore.length ? doneBefore.reduce((a, w) => a + w.dist, 0) / doneBefore.length : null;
+  const throughThis = cur.runs.filter(r => r.run_date < x.run_date || ordered.indexOf(r) <= at).reduce((a, r) => a + dist(r.distance_m), 0);
   const splits = ((DATA.splits[x.activity_id] || {})[state.units] || []);
   const splitLines = splits.map((s, i) => `${s[6] ? "partial " : ""}${i + 1}: ${fmtPace(s[1] / (s[0] / u.m))}/${L}` +
     (s[2] != null ? `, grade-adjusted ${fmtPace(s[2])}` : "") + (s[3] ? `, HR ${Math.round(s[3])}` : "") +
@@ -1258,11 +1267,17 @@ function buildReviewInput(x) {
   const repLines = reps.map((q, i) => `rep ${i + 1}: ${num(q[0], 0)} m in ${Math.round(q[1])} s` + (q[3] ? `, HR ${q[3]}` : "") + (q[4] != null ? `, recovery ${Math.round(q[4])} s` : ""));
   const load = DATA.load.find(d => d.date_day === x.run_date);
   const nut = d => { const n = DATA.nutrition.find(q => q.log_date === d); return n ? `${d} (${n.day_type}): ${Math.round(n.calories)} kcal` + (n.calories_goal ? ` vs ${Math.round(n.calories_goal)} goal` : "") + `, protein ${Math.round(n.protein_g)} g` + (n.protein_g_goal ? ` vs ${Math.round(n.protein_g_goal)} goal` : "") : null; };
-  const stopped = x.elapsed_time_s - x.moving_time_s;
+  const fuel = [nut(shiftDay(x.run_date, -1)), nut(x.run_date)].filter(Boolean);
+  const stopped = x.elapsed_time_s - x.moving_time_s, newest = later.length === 0;
+  const lastLabel = newest ? "Next run" : "What came next";
   return [
     "You are reviewing one run for the runner who owns this training dashboard. Use ONLY the data below; never invent numbers. Plain, specific, direct, no emoji, no generic encouragement, no markdown symbols (no **, #, or bullets).",
-    "Write exactly five short paragraphs, each starting with its label and a colon: Verdict (one sentence, the single most important takeaway), Pacing, Effort vs terrain, This week, Next run. Skip a detail silently if its data is missing. Stay under 230 words total.",
-    `"This week" must put THIS run in the context of the weekly mileage below: how much was run so far this week against the previous weeks, whether the weekly build is steady, too fast or a deliberate cutback, and what the rest of the week should look like. Weeks start on ${startName} (the runner's setting). Distances are in ${L}.`,
+    `Treat the data as a timeline. The run under review is marked THIS RUN and is ${newest ? "the most recent run in the data, so nothing has followed it yet" : `NOT the newest: ${later.length} later run${later.length === 1 ? "" : "s"} (listed under RUNS AFTER) already happened, so never recommend or predict a run that is already in the data`}.`,
+    `Write exactly five short paragraphs, each starting with its label and a colon: Verdict (one sentence, the single most important takeaway), Pacing, Effort vs terrain, Week context, ${lastLabel}. Skip a detail silently if its data is missing. Stay under 260 words total.`,
+    `"Week context" places this run among the weekly mileage below: the weeks before it, the week it sits in (weeks start on ${startName}, the runner's setting), and any weeks after it. Say whether the build is steady, too fast or a deliberate cutback, and where this run fits in the week's total and rhythm (rest days around it, hard-easy spacing).`,
+    newest ? `"Next run" is one concrete suggestion for the next run (target pace, distance or pacing cue) that fits the rest of this week.`
+      : `"What came next" looks at the run(s) that followed: did the effort, spacing and distance that followed fit this run, and how did the weekly mileage turn out. Judge only what the data shows.`,
+    `Distances are in ${L}. Each entry is a separate Strava activity, so a warm-up, race or workout and its cool-down on the same day appear as separate runs; the weekly totals already include all of them.`,
     "",
     `THIS RUN: ${x.run_date} (${dayName(x.run_date)}), "${x.activity_name}", ${num(dist(x.distance_m), 2)} ${L}, moving ${Math.round(x.moving_time_s / 60)} min, avg pace ${pace(x)}` +
       (x.elev_gain_m != null ? `, ${Math.round(x.elev_gain_m * u.elevPerM)} ${u.elev} gain` : "") +
@@ -1272,13 +1287,17 @@ function buildReviewInput(x) {
     splitLines.length ? `SPLITS (per ${L}):\n${splitLines.join("\n")}` : "",
     repLines.length ? `WORKOUT REPS:\n${repLines.join("\n")}` : "",
     "",
-    `WEEK OF THIS RUN (${startName} ${wk} to ${cur.end}${inProgress ? `, still in progress: data runs through ${dataEnd}, ${daysLeft} day${daysLeft === 1 ? "" : "s"} left` : ", complete"}):`,
-    cur.runs.map(runLine).join("\n") || "(no valid runs)",
-    `Week total so far: ${f1(cur.dist)} ${L} over ${cur.runs.length} run${cur.runs.length === 1 ? "" : "s"}.`,
+    before.length ? `RUNS BEFORE (oldest first):\n${before.map((r, i) => `${runLine(r)}${i === before.length - 1 ? `  [${gap(r.run_date, x.run_date, "before")}]` : ""}`).join("\n")}` : "RUNS BEFORE: none in the data.",
+    newest ? `RUNS AFTER: none yet. Data ends ${dataEnd}.` : `RUNS AFTER (in order):\n${later.map((r, i) => `${runLine(r)}${i === 0 ? `  [${gap(x.run_date, r.run_date, "after")}]` : ""}`).join("\n")}`,
     "",
-    prior.length ? `PREVIOUS COMPLETED WEEKS (newest first):\n${prior.map(w => `${w.k}: ${f1(w.dist)} ${L}, ${w.runs.length} run${w.runs.length === 1 ? "" : "s"}, longest ${w.runs.length ? f1(Math.max(...w.runs.map(r => dist(r.distance_m)))) : "0"} ${L}`).join("\n")}\n4-week average: ${f1(prevAvg)} ${L}.` : "No earlier weeks in the data.",
+    `WEEKLY MILEAGE (${startName}-start weeks, oldest first; data ends ${dataEnd}):`,
+    ...weeksBefore.map(w => weekLine(w, "before")),
+    weekLine(cur, "THIS RUN'S WEEK") + `. ${f1(throughThis)} ${L} had been run in this week once this run was done.`,
+    ...weeksAfter.map(w => weekLine(w, "after")),
+    avgBefore != null ? `Average of the completed weeks before: ${f1(avgBefore)} ${L}.` : "",
+    "",
     load && load.acute_chronic_ratio != null ? `Acute:chronic load ratio on the run date: ${num(load.acute_chronic_ratio, 2)}.` : "",
-    [nut(shiftDay(x.run_date, -1)), nut(x.run_date)].filter(Boolean).length ? `FUEL: ${[nut(shiftDay(x.run_date, -1)), nut(x.run_date)].filter(Boolean).join(" | ")}` : "",
+    fuel.length ? `FUEL: ${fuel.join(" | ")}` : "",
   ].filter(s => s !== "").join("\n");
 }
 function setReviewText(out, text) {
