@@ -138,6 +138,16 @@
   .caption{font-size:11.5px;color:var(--ink-faint);margin:-2px 0 4px;line-height:1.45}
   td.faster{color:var(--good)}
   td.slower{color:var(--warn)}
+  .ai-review{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border);padding-top:10px}
+  .ai-head{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap}
+  .ai-head .caption{margin:0}
+  .ai-btn{color:var(--accent);background:var(--accent-wash);border-color:var(--accent-soft)}
+  .ai-out{font-size:13.5px;line-height:1.55;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;-webkit-user-select:text;user-select:text}
+  .ai-out p{margin:0 0 8px}
+  .ai-out p:last-child{margin-bottom:0}
+  .ai-out b{font-weight:700}
+  .ai-out.pending{color:var(--ink-muted)}
+  .ai-out.err{color:var(--warn);background:var(--warn-wash);border-color:transparent}
 </style>
 
 <div class="wrap">
@@ -207,6 +217,14 @@
         <button type="button" class="pill" data-type="workout" aria-pressed="false">Workout</button>
       </div>
       <p class="caption" id="run-type-status" aria-live="polite"></p>
+    </div>
+    <div class="ai-review" id="ai-review" hidden>
+      <div class="ai-head">
+        <button type="button" class="pill ai-btn" id="ai-run">Review this run</button>
+        <button type="button" class="pill" id="ai-stop" hidden>Stop</button>
+        <span class="caption" id="ai-note"></span>
+      </div>
+      <div class="ai-out" id="ai-out" aria-live="polite" hidden></div>
     </div>
     <div class="reps" id="reps-block" hidden>
       <div class="reps" id="reps-body">
@@ -383,7 +401,7 @@ function initControls() {
     state.units = key; store.set("units", key); renderAll();
   });
   pillGroup($("week-start"), [{key: 0, label: "Sun start"}, {key: 1, label: "Mon start"}], state.weekStart, key => {
-    state.weekStart = key; store.set("weekStart", String(key)); renderWeekly(); renderWeeklyTable();
+    state.weekStart = key; store.set("weekStart", String(key)); renderWeekly(); renderWeeklyTable(); syncReview();
   });
   $("run-select").addEventListener("change", e => selectRun(e.target.value, false));
 }
@@ -699,6 +717,7 @@ function selectRun(id, scroll) {
   if (scroll) $("explorer").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start"});
 }
 function renderRun() {
+  syncReview();
   const x = DATA.runs.find(r => r.activity_id === state.runId), u = U();
   if (!x) { $("run-stats").textContent = "No runs with split detail yet."; $("reps-block").hidden = true; $("run-type").hidden = true; $("splits-chart").innerHTML = ""; $("profile-chart").innerHTML = ""; return; }
   const splits = (DATA.splits[x.activity_id] || {})[state.units] || [];
@@ -1211,12 +1230,149 @@ function renderProfile(prof) {
   hit.addEventListener("pointerleave", () => { hideTip(tip); cross.setAttribute("opacity", 0); });
 }
 
+/* ---------- AI review: Claude reads the selected run plus its week's mileage ----------
+   Uses the artifact `sample` capability (the viewer's own Claude usage, asked on first click).
+   Where it is unavailable (standalone copy, signed out, declined) the block stays hidden. */
+const review = {sample: null, ctl: null, key: null};
+const reviewKey = () => [state.runId, state.weekStart, state.units].join("|");
+const dayName = iso => dateObj(iso).toLocaleDateString("en-US", {weekday: "short"});
+function weekStats(k) {
+  const end = shiftDay(k, 6), runs = validRuns().filter(x => x.run_date >= k && x.run_date <= end);
+  return {k, end, runs, dist: runs.reduce((a, x) => a + dist(x.distance_m), 0)};
+}
+function buildReviewInput(x) {
+  const u = U(), L = u.label, startName = state.weekStart === 1 ? "Monday" : "Sunday";
+  const dataEnd = DATA.meta.date_max, wk = weekOf(x.run_date), cur = weekStats(wk);
+  // Timeline of every valid run, so the review sees what came before AND after this one.
+  const ordered = validRuns().slice().sort((a, b) => a.run_date === b.run_date ? (a.activity_id < b.activity_id ? -1 : 1) : (a.run_date < b.run_date ? -1 : 1));
+  const at = ordered.findIndex(r => r.activity_id === x.activity_id);
+  const before = ordered.slice(Math.max(at - 4, 0), at), later = ordered.slice(at + 1, at + 6);
+  const days = (a, b) => Math.round((dateObj(b) - dateObj(a)) / 864e5);
+  const gap = (a, b, dir) => { const d = days(a, b); return d === 0 ? `same day, ${dir === "before" ? "earlier" : "later"}` : `${d} day${d === 1 ? "" : "s"} ${dir} this run`; };
+  const f1 = v => num(v, 1), pace = r => `${fmtPace(runPace(r))}/${L}`;
+  const runLine = r => `${dayName(r.run_date)} ${r.run_date}: ${num(dist(r.distance_m), 2)} ${L} at ${pace(r)}` +
+    (r.avg_hr ? `, avg HR ${Math.round(r.avg_hr)}` : "") + (workoutTag(r) ? ` (${workoutTag(r)})` : "");
+  const weekLine = (w, tag) => `${w.k} to ${w.end}${tag ? ` [${tag}]` : ""}${w.end > dataEnd ? ` (in progress, data ends ${dataEnd})` : ""}: ` +
+    `${f1(w.dist)} ${L} over ${w.runs.length} run${w.runs.length === 1 ? "" : "s"}` + (w.runs.length ? `, longest ${f1(Math.max(...w.runs.map(r => dist(r.distance_m))))} ${L}` : "");
+  const weeksBefore = [4, 3, 2, 1].map(i => weekStats(shiftDay(wk, -7 * i))).filter(w => w.end >= DATA.meta.date_min);
+  const weeksAfter = [1, 2].map(i => weekStats(shiftDay(wk, 7 * i))).filter(w => w.k <= dataEnd);
+  const doneBefore = weeksBefore.filter(w => w.end <= dataEnd);
+  const avgBefore = doneBefore.length ? doneBefore.reduce((a, w) => a + w.dist, 0) / doneBefore.length : null;
+  const throughThis = cur.runs.filter(r => r.run_date < x.run_date || ordered.indexOf(r) <= at).reduce((a, r) => a + dist(r.distance_m), 0);
+  const splits = ((DATA.splits[x.activity_id] || {})[state.units] || []);
+  const splitLines = splits.map((s, i) => `${s[6] ? "partial " : ""}${i + 1}: ${fmtPace(s[1] / (s[0] / u.m))}/${L}` +
+    (s[2] != null ? `, grade-adjusted ${fmtPace(s[2])}` : "") + (s[3] ? `, HR ${Math.round(s[3])}` : "") +
+    (s[4] != null ? `, +${Math.round(s[4] * u.elevPerM)}/-${Math.round((s[5] || 0) * u.elevPerM)} ${u.elev}` : ""));
+  const reps = DATA.reps[x.activity_id] || [];
+  const repLines = reps.map((q, i) => `rep ${i + 1}: ${num(q[0], 0)} m in ${Math.round(q[1])} s` + (q[3] ? `, HR ${q[3]}` : "") + (q[4] != null ? `, recovery ${Math.round(q[4])} s` : ""));
+  const load = DATA.load.find(d => d.date_day === x.run_date);
+  const nut = d => { const n = DATA.nutrition.find(q => q.log_date === d); return n ? `${d} (${n.day_type}): ${Math.round(n.calories)} kcal` + (n.calories_goal ? ` vs ${Math.round(n.calories_goal)} goal` : "") + `, protein ${Math.round(n.protein_g)} g` + (n.protein_g_goal ? ` vs ${Math.round(n.protein_g_goal)} goal` : "") : null; };
+  const fuel = [nut(shiftDay(x.run_date, -1)), nut(x.run_date)].filter(Boolean);
+  const stopped = x.elapsed_time_s - x.moving_time_s, newest = later.length === 0;
+  const lastLabel = newest ? "Next run" : "What came next";
+  return [
+    "You are reviewing one run for the runner who owns this training dashboard. Use ONLY the data below; never invent numbers. Plain, specific, direct, no emoji, no generic encouragement, no markdown symbols (no **, #, or bullets).",
+    `Treat the data as a timeline. The run under review is marked THIS RUN and is ${newest ? "the most recent run in the data, so nothing has followed it yet" : `NOT the newest: ${later.length} later run${later.length === 1 ? "" : "s"} (listed under RUNS AFTER) already happened, so never recommend or predict a run that is already in the data`}.`,
+    `Write exactly five short paragraphs, each starting with its label and a colon: Verdict (one sentence, the single most important takeaway), Pacing, Effort vs terrain, Week context, ${lastLabel}. Skip a detail silently if its data is missing. Stay under 260 words total.`,
+    `"Week context" places this run among the weekly mileage below: the weeks before it, the week it sits in (weeks start on ${startName}, the runner's setting), and any weeks after it. Say whether the build is steady, too fast or a deliberate cutback, and where this run fits in the week's total and rhythm (rest days around it, hard-easy spacing).`,
+    newest ? `"Next run" is one concrete suggestion for the next run (target pace, distance or pacing cue) that fits the rest of this week.`
+      : `"What came next" looks at the run(s) that followed: did the effort, spacing and distance that followed fit this run, and how did the weekly mileage turn out. Judge only what the data shows.`,
+    `Distances are in ${L}. Each entry is a separate Strava activity, so a warm-up, race or workout and its cool-down on the same day appear as separate runs; the weekly totals already include all of them.`,
+    "",
+    `THIS RUN: ${x.run_date} (${dayName(x.run_date)}), "${x.activity_name}", ${num(dist(x.distance_m), 2)} ${L}, moving ${Math.round(x.moving_time_s / 60)} min, avg pace ${pace(x)}` +
+      (x.elev_gain_m != null ? `, ${Math.round(x.elev_gain_m * u.elevPerM)} ${u.elev} gain` : "") +
+      (x.avg_hr ? `, HR avg ${Math.round(x.avg_hr)} / max ${Math.round(x.max_hr)}` : "") +
+      (x.aerobic_decoupling_pct != null ? `, aerobic decoupling ${num(x.aerobic_decoupling_pct * 100, 1)}%` : "") +
+      (x.is_negative_split ? ", negative split" : "") + (stopped > 60 ? `, ${Math.round(stopped / 60)} min stopped` : "") + (workoutTag(x) ? `, tagged ${workoutTag(x)}` : "") + ".",
+    splitLines.length ? `SPLITS (per ${L}):\n${splitLines.join("\n")}` : "",
+    repLines.length ? `WORKOUT REPS:\n${repLines.join("\n")}` : "",
+    "",
+    before.length ? `RUNS BEFORE (oldest first):\n${before.map((r, i) => `${runLine(r)}${i === before.length - 1 ? `  [${gap(r.run_date, x.run_date, "before")}]` : ""}`).join("\n")}` : "RUNS BEFORE: none in the data.",
+    newest ? `RUNS AFTER: none yet. Data ends ${dataEnd}.` : `RUNS AFTER (in order):\n${later.map((r, i) => `${runLine(r)}${i === 0 ? `  [${gap(x.run_date, r.run_date, "after")}]` : ""}`).join("\n")}`,
+    "",
+    `WEEKLY MILEAGE (${startName}-start weeks, oldest first; data ends ${dataEnd}):`,
+    ...weeksBefore.map(w => weekLine(w, "before")),
+    weekLine(cur, "THIS RUN'S WEEK") + `. ${f1(throughThis)} ${L} had been run in this week once this run was done.`,
+    ...weeksAfter.map(w => weekLine(w, "after")),
+    avgBefore != null ? `Average of the completed weeks before: ${f1(avgBefore)} ${L}.` : "",
+    "",
+    load && load.acute_chronic_ratio != null ? `Acute:chronic load ratio on the run date: ${num(load.acute_chronic_ratio, 2)}.` : "",
+    fuel.length ? `FUEL: ${fuel.join(" | ")}` : "",
+  ].filter(s => s !== "").join("\n");
+}
+function setReviewText(out, text) {
+  out.textContent = "";
+  text.split(/\n+/).filter(l => l.trim()).forEach(line => {
+    const p = document.createElement("p"), m = line.match(/^([A-Za-z][A-Za-z ]{1,24}):\s*(.*)$/);
+    if (m) { const b = document.createElement("b"); b.textContent = m[1] + ": "; p.append(b, m[2]); } else p.textContent = line;
+    out.appendChild(p);
+  });
+}
+function syncReview() {
+  const box = $("ai-review");
+  if (!review.sample) return;
+  const x = DATA.runs.find(r => r.activity_id === state.runId);
+  box.hidden = !x;
+  if (!x) return;
+  if (review.key !== reviewKey()) {          // another run, week start or unit: the old answer no longer applies
+    if (review.ctl) review.ctl.abort();
+    review.key = reviewKey();
+    $("ai-out").hidden = true; $("ai-out").className = "ai-out";
+    $("ai-run").textContent = "Review this run"; $("ai-run").disabled = false; $("ai-stop").hidden = true;
+  }
+  const wk = weekOf(x.run_date);
+  $("ai-note").textContent = `Uses your Claude usage · week of ${fmtDate(wk)} (${state.weekStart === 1 ? "Mon" : "Sun"} start)`;
+}
+async function runReview(refresh) {
+  const x = DATA.runs.find(r => r.activity_id === state.runId);
+  if (!x || !review.sample) return;
+  const ctl = review.ctl = new AbortController(), out = $("ai-out"), btn = $("ai-run"), stop = $("ai-stop");
+  review.key = reviewKey();
+  out.className = "ai-out pending"; out.hidden = false; setReviewText(out, "Thinking…");
+  btn.disabled = true; stop.hidden = false;
+  const done = () => { btn.disabled = false; stop.hidden = true; };
+  try {
+    const res = await review.sample(buildReviewInput(x), {
+      signal: ctl.signal,
+      cache: refresh ? {gcTime: 300000, refresh: true} : true,
+      onText: ({text}) => { if (review.ctl === ctl) { out.className = "ai-out"; setReviewText(out, text); } },
+    });
+    if (review.ctl !== ctl) return;
+    out.className = "ai-out"; setReviewText(out, res.text);
+    btn.textContent = "Regenerate";
+    if (res.truncated) $("ai-note").textContent = "Cut short. Regenerate for a fresh pass.";
+    done();
+  } catch (e) {
+    if (review.ctl !== ctl) return;              // superseded by a newer selection
+    done();
+    const code = e && e.code;
+    if (code === "cancelled") { if (e.text) setReviewText(out, e.text); else out.hidden = true; btn.textContent = e.text ? "Regenerate" : "Review this run"; return; }
+    if (["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"].includes(code)) { $("ai-review").hidden = true; review.sample = null; return; }
+    const msg = code === "rate_limited" ? "Claude is rate limited or your usage limit is reached. Try again later."
+      : code === "session_expired" ? "Your Claude session expired. Sign in again, then retry."
+      : code === "refused" ? "Claude declined to review this run."
+      : "Could not get a review. Try again.";
+    if (e.text && code !== "refused") { setReviewText(out, e.text); out.className = "ai-out"; $("ai-note").textContent = msg; }
+    else { out.className = "ai-out err"; out.textContent = msg; }
+    btn.textContent = "Try again";
+  }
+}
+async function initReview() {
+  let s = null;
+  try { s = window.claude && window.claude.use ? await window.claude.use("sample") : null; } catch (e) { s = null; }
+  if (!s) return;
+  review.sample = s;
+  $("ai-run").addEventListener("click", () => runReview($("ai-run").textContent === "Regenerate"));
+  $("ai-stop").addEventListener("click", () => review.ctl && review.ctl.abort());
+  syncReview();
+}
+
 /* ---------- boot ---------- */
 function renderCharts() { renderWeekly(); renderPace(); renderLoad(); renderCalories(); renderRun(); }
 function renderAll() {
   renderHeader(); renderKpis(); renderRunsTable(); renderWeeklyTable(); fillRunSelect(); renderCharts();
 }
-initControls(); renderHealth(); renderAll();
+initControls(); renderHealth(); renderAll(); initReview();
 let resizeTimer, lastWidth = document.querySelector(".wrap").clientWidth;
 new ResizeObserver(() => {
   const wNow = document.querySelector(".wrap").clientWidth;
